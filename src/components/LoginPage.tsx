@@ -9,6 +9,7 @@ import { toast } from "sonner@2.0.3";
 import { Lock, User, Eye, EyeOff } from "lucide-react";
 import andersenLogo from "figma:asset/c5292bdd917281e818e79b22fa402c2806ae9d2e.png";
 import PrivacyPolicy from "./PrivacyPolicy";
+import { logger } from "../utils/logger";
 
 interface LoginPageProps {
   onLogin: (user: any) => void;
@@ -46,6 +47,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const data = await response.json();
 
       if (!response.ok) {
+        // Log failed login attempt
+        await logger.audit(
+          username || "Unknown",
+          "Login",
+          "Authentication",
+          `Login failed: ${data.error || "Invalid credentials"}`,
+          "failed"
+        );
         toast.error(data.error || "Login failed");
         setLoading(false);
         return;
@@ -59,6 +68,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         toast.info("Please change your default password");
         return;
       }
+
+      // Log successful login
+      await logger.audit(
+        data.user.name || username,
+        "Login",
+        "Authentication",
+        "User logged in successfully",
+        "success"
+      );
 
       toast.success("Login successful!");
       onLogin(data.user);
@@ -222,7 +240,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             {/* Copyright Notice */}
             <div className="text-center mt-4 sm:mt-6 pt-4 border-t border-gray-200">
               <p className="text-xs sm:text-sm text-gray-600">
-                © 2025 Andersen Tax LLC and Andersen Tax LP.<br />
+                © {new Date().getFullYear()} Andersen Tax LLC and Andersen Tax LP.<br />
                 All Rights Reserved.<br />
                 <button
                   type="button"

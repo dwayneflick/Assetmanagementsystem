@@ -1,21 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense, useCallback } from "react";
 import LoginPage from "./components/LoginPage";
-import Dashboard from "./components/Dashboard";
-import AssetManagement from "./components/AssetManagement";
-import IncidentReports from "./components/IncidentReports";
-import SoftwareManagement from "./components/SoftwareManagement";
-import ITIssueLogs from "./components/ITIssueLogs";
-import PurchaseOrders from "./components/PurchaseOrders";
-import Deregistration from "./components/Deregistration";
-import KnowledgeBase from "./components/KnowledgeBase";
-import Reports from "./components/Reports";
-import AssetHandover from "./components/AssetHandover";
-import Settings from "./components/Settings";
 import Sidebar from "./components/Sidebar";
 import Notifications from "./components/Notifications";
 import { Toaster } from "./components/ui/sonner";
-import { Menu } from "lucide-react";
+import { Menu, Loader2 } from "lucide-react";
 import { Button } from "./components/ui/button";
+import faviconImage from "figma:asset/c5292bdd917281e818e79b22fa402c2806ae9d2e.png";
+
+// Lazy load all major components for code splitting and better performance
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const AssetManagement = lazy(() => import("./components/AssetManagement"));
+const IncidentReports = lazy(() => import("./components/IncidentReports"));
+const SoftwareManagement = lazy(() => import("./components/SoftwareManagement"));
+const ITIssueLogs = lazy(() => import("./components/ITIssueLogs"));
+const PurchaseOrders = lazy(() => import("./components/PurchaseOrders"));
+const Deregistration = lazy(() => import("./components/Deregistration"));
+const KnowledgeBase = lazy(() => import("./components/KnowledgeBase"));
+const Reports = lazy(() => import("./components/Reports"));
+const AssetHandover = lazy(() => import("./components/AssetHandover"));
+const Settings = lazy(() => import("./components/Settings"));
 
 export type UserRole = "admin" | "agent";
 
@@ -31,6 +34,18 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Set favicon
+  useEffect(() => {
+    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement || document.createElement('link');
+    link.type = 'image/png';
+    link.rel = 'icon';
+    link.href = faviconImage;
+    document.getElementsByTagName('head')[0].appendChild(link);
+    
+    // Also set the page title
+    document.title = 'Andersen Asset Management System';
+  }, []);
+
   // Check for saved session on mount
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
@@ -44,11 +59,24 @@ export default function App() {
     localStorage.setItem("user", JSON.stringify(userData));
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setUser(null);
     localStorage.removeItem("user");
     setCurrentPage("dashboard");
-  };
+  }, []);
+
+  const handleNavigate = useCallback((page: string) => {
+    setCurrentPage(page);
+    setSidebarOpen(false); // Close sidebar on mobile after navigation
+  }, []);
+
+  const handleCloseSidebar = useCallback(() => {
+    setSidebarOpen(false);
+  }, []);
+
+  const handleOpenSidebar = useCallback(() => {
+    setSidebarOpen(true);
+  }, []);
 
   if (!user) {
     return (
@@ -88,11 +116,6 @@ export default function App() {
     }
   };
 
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page);
-    setSidebarOpen(false); // Close sidebar on mobile after navigation
-  };
-
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Mobile overlay */}
@@ -109,7 +132,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onLogout={handleLogout}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={handleCloseSidebar}
       />
       
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -118,7 +141,7 @@ export default function App() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setSidebarOpen(true)}
+            onClick={handleOpenSidebar}
             className="p-2"
           >
             <Menu className="w-6 h-6" />
@@ -140,7 +163,14 @@ export default function App() {
         </header>
         
         <main className="flex-1 overflow-auto">
-          {renderPage()}
+          <Suspense fallback={
+            <div className="flex flex-col justify-center items-center h-full space-y-4">
+              <Loader2 className="w-12 h-12 animate-spin text-gradient-to-r from-red-900 to-rose-900" style={{ color: '#7f1d1d' }} />
+              <p className="text-gray-600 text-sm">Loading...</p>
+            </div>
+          }>
+            {renderPage()}
+          </Suspense>
         </main>
       </div>
       <Toaster />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { User } from "../App";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -169,52 +169,204 @@ export default function Dashboard({ user }: DashboardProps) {
     }
   };
 
-  // Original Dashboard Metrics
-  const totalAssets = assets.length;
-  const totalInUse = assets.filter((a) => a.assetState === "In Use/Active").length;
-  const totalUnassigned = assets.filter((a) => a.assetState === "Unassigned").length;
-  const totalFaulty = assets.filter((a) => a.assetState === "Faulty").length;
-  const totalRetired = assets.filter((a) => a.assetState === "Retired").length;
-  const totalDisposed = assets.filter((a) => a.assetState === "Disposed").length;
+  // Memoize expensive calculations to prevent unnecessary recomputations
+  const dashboardMetrics = useMemo(() => {
+    // Original Dashboard Metrics
+    const totalAssets = assets.length;
+    const totalInUse = assets.filter((a) => a.assetState === "In Use/Active").length;
+    const totalUnassigned = assets.filter((a) => a.assetState === "Unassigned").length;
+    const totalFaulty = assets.filter((a) => a.assetState === "Faulty").length;
+    const totalRetired = assets.filter((a) => a.assetState === "Retired").length;
+    const totalDisposed = assets.filter((a) => a.assetState === "Disposed").length;
 
-  const totalCost = assets.reduce((sum, asset) => sum + (asset.cost || 0), 0);
+    const totalCost = assets.reduce((sum, asset) => sum + (asset.cost || 0), 0);
 
-  // Calculate expired assets (warranty expired)
-  const today = new Date();
-  const expiredAssets = assets.filter((a) => {
-    if (!a.warrantyExpiry) return false;
-    return new Date(a.warrantyExpiry) < today;
-  });
+    // Calculate expired assets (warranty expired)
+    const today = new Date();
+    const expiredAssets = assets.filter((a) => {
+      if (!a.warrantyExpiry) return false;
+      return new Date(a.warrantyExpiry) < today;
+    });
 
-  // Get new assets (created in last 30 days)
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const newAssets = assets.filter((a) => new Date(a.createdAt) > thirtyDaysAgo);
+    // Get new assets (created in last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const newAssets = assets.filter((a) => new Date(a.createdAt) > thirtyDaysAgo);
 
-  // Software expiring soon (within 60 days)
-  const sixtyDaysFromNow = new Date();
-  sixtyDaysFromNow.setDate(sixtyDaysFromNow.getDate() + 60);
-  const expiringSoftware = software.filter((s) => {
-    if (!s.expiryDate) return false;
-    const expiryDate = new Date(s.expiryDate);
-    return expiryDate > today && expiryDate < sixtyDaysFromNow;
-  });
+    // Software expiring soon (within 60 days)
+    const sixtyDaysFromNow = new Date();
+    sixtyDaysFromNow.setDate(sixtyDaysFromNow.getDate() + 60);
+    const expiringSoftware = software.filter((s) => {
+      if (!s.expiryDate) return false;
+      const expiryDate = new Date(s.expiryDate);
+      return expiryDate > today && expiryDate < sixtyDaysFromNow;
+    });
 
-  // Asset state distribution for pie chart
-  const assetStateData = [
-    { name: "In Use", value: totalInUse, color: "#10b981" },
-    { name: "Unassigned", value: totalUnassigned, color: "#f59e0b" },
-    { name: "Faulty", value: totalFaulty, color: "#ef4444" },
-    { name: "Retired", value: totalRetired, color: "#6b7280" },
-    { name: "Disposed", value: totalDisposed, color: "#9ca3af" },
-  ].filter((item) => item.value > 0);
+    // Asset state distribution for pie chart
+    const assetStateData = [
+      { name: "In Use", value: totalInUse, color: "#10b981" },
+      { name: "Unassigned", value: totalUnassigned, color: "#f59e0b" },
+      { name: "Faulty", value: totalFaulty, color: "#ef4444" },
+      { name: "Retired", value: totalRetired, color: "#6b7280" },
+      { name: "Disposed", value: totalDisposed, color: "#9ca3af" },
+    ].filter((item) => item.value > 0);
 
-  // Asset type distribution for bar chart
-  const assetTypeData = [
-    { type: "Hardware", count: assets.filter((a) => a.productType === "Hardware").length },
-    { type: "Software", count: assets.filter((a) => a.productType === "Software").length },
-    { type: "Network", count: assets.filter((a) => a.productType === "Network").length },
-  ];
+    // Asset type distribution for bar chart
+    const assetTypeData = [
+      { type: "Hardware", count: assets.filter((a) => a.productType === "Hardware").length },
+      { type: "Software", count: assets.filter((a) => a.productType === "Software").length },
+      { type: "Network", count: assets.filter((a) => a.productType === "Network").length },
+    ];
+
+    return {
+      totalAssets,
+      totalInUse,
+      totalUnassigned,
+      totalFaulty,
+      totalRetired,
+      totalDisposed,
+      totalCost,
+      expiredAssets,
+      newAssets,
+      expiringSoftware,
+      assetStateData,
+      assetTypeData,
+      today,
+    };
+  }, [assets, software]);
+
+  // Memoize advanced analytics calculations
+  const advancedMetrics = useMemo(() => {
+    const today = dashboardMetrics.today;
+
+    const totalLaptopIncidents = incidents.filter((inc) => 
+      inc.category?.toLowerCase().includes("laptop") || 
+      inc.category?.toLowerCase().includes("hardware")
+    ).length;
+
+    const totalITIssueLogs = itIssues.length;
+
+    // Highest issues faced - count by category
+    const issuesByCategory: Record<string, number> = {};
+    [...incidents, ...itIssues].forEach((item) => {
+      const category = item.category || "Other";
+      issuesByCategory[category] = (issuesByCategory[category] || 0) + 1;
+    });
+    const highestIssue = Object.entries(issuesByCategory).sort((a, b) => b[1] - a[1])[0];
+
+    const totalStaffExited = deregistrations.filter((d) => 
+      d.reason?.toLowerCase().includes("exit") || 
+      d.reason?.toLowerCase().includes("resignation") ||
+      d.reason?.toLowerCase().includes("terminated")
+    ).length;
+
+    const softwareExpired = software.filter((s) => {
+      if (!s.expiryDate) return false;
+      return new Date(s.expiryDate) < today;
+    }).length;
+
+    const totalWindowsSystems = assets.filter((a) => 
+      a.operatingSystem?.toLowerCase().includes("windows")
+    ).length;
+
+    // System type breakdown
+    const systemTypes: Record<string, number> = {};
+    assets.forEach((asset) => {
+      const os = asset.operatingSystem || "Unknown";
+      systemTypes[os] = (systemTypes[os] || 0) + 1;
+    });
+
+    // Laptops per department
+    const laptopsByDept: Record<string, number> = {};
+    assets.filter((a) => a.assetName?.toLowerCase().includes("laptop")).forEach((laptop) => {
+      const dept = laptop.department || "Unassigned";
+      laptopsByDept[dept] = (laptopsByDept[dept] || 0) + 1;
+    });
+
+    const inProgressITIssues = itIssues.filter((issue) => 
+      issue.status === "In Progress" || issue.status === "Open"
+    ).length;
+
+    // Calculate total downtime
+    const calculateDowntime = (downtimeStr?: string): number => {
+      if (!downtimeStr) return 0;
+      const hoursMatch = downtimeStr.match(/(\d+)\s*hour/i);
+      const daysMatch = downtimeStr.match(/(\d+)\s*day/i);
+      let hours = 0;
+      if (hoursMatch) hours += parseInt(hoursMatch[1]);
+      if (daysMatch) hours += parseInt(daysMatch[1]) * 24;
+      return hours;
+    };
+
+    const totalDowntime = itIssues.reduce((sum, issue) => sum + calculateDowntime(issue.downtime), 0);
+
+    // Poor ratings - count critical/high severity issues
+    const poorRatings = itIssues.filter((issue) => 
+      issue.severity === "Critical" || issue.severity === "High"
+    ).length;
+
+    // Chart data
+    const issuesByCategoryData = Object.entries(issuesByCategory).map(([name, value]) => ({
+      name,
+      value,
+    }));
+
+    const systemTypesData = Object.entries(systemTypes).map(([name, value]) => ({
+      name,
+      value,
+    }));
+
+    const laptopsByDeptData = Object.entries(laptopsByDept).map(([name, value]) => ({
+      name,
+      value,
+    }));
+
+    return {
+      totalLaptopIncidents,
+      totalITIssueLogs,
+      highestIssue,
+      totalStaffExited,
+      softwareExpired,
+      totalWindowsSystems,
+      inProgressITIssues,
+      totalDowntime,
+      poorRatings,
+      issuesByCategoryData,
+      systemTypesData,
+      laptopsByDeptData,
+    };
+  }, [assets, software, incidents, itIssues, deregistrations, dashboardMetrics.today]);
+
+  // Extract metrics for easier access
+  const {
+    totalAssets,
+    totalInUse,
+    totalUnassigned,
+    totalFaulty,
+    totalRetired,
+    totalDisposed,
+    totalCost,
+    expiredAssets,
+    newAssets,
+    expiringSoftware,
+    assetStateData,
+    assetTypeData,
+  } = dashboardMetrics;
+
+  const {
+    totalLaptopIncidents,
+    totalITIssueLogs,
+    highestIssue,
+    totalStaffExited,
+    softwareExpired,
+    totalWindowsSystems,
+    inProgressITIssues,
+    totalDowntime,
+    poorRatings,
+    issuesByCategoryData,
+    systemTypesData,
+    laptopsByDeptData,
+  } = advancedMetrics;
 
   const originalStatCards = [
     {
@@ -260,89 +412,6 @@ export default function Dashboard({ user }: DashboardProps) {
       change: "Next 60 days",
     },
   ];
-
-  // New Advanced Analytics Calculations
-  const totalLaptopIncidents = incidents.filter((inc) => 
-    inc.category?.toLowerCase().includes("laptop") || 
-    inc.category?.toLowerCase().includes("hardware")
-  ).length;
-
-  const totalITIssueLogs = itIssues.length;
-
-  // Highest issues faced - count by category
-  const issuesByCategory: Record<string, number> = {};
-  [...incidents, ...itIssues].forEach((item) => {
-    const category = item.category || "Other";
-    issuesByCategory[category] = (issuesByCategory[category] || 0) + 1;
-  });
-  const highestIssue = Object.entries(issuesByCategory).sort((a, b) => b[1] - a[1])[0];
-
-  const totalStaffExited = deregistrations.filter((d) => 
-    d.reason?.toLowerCase().includes("exit") || 
-    d.reason?.toLowerCase().includes("resignation") ||
-    d.reason?.toLowerCase().includes("terminated")
-  ).length;
-
-  const softwareExpired = software.filter((s) => {
-    if (!s.expiryDate) return false;
-    return new Date(s.expiryDate) < today;
-  }).length;
-
-  const totalWindowsSystems = assets.filter((a) => 
-    a.operatingSystem?.toLowerCase().includes("windows")
-  ).length;
-
-  // System type breakdown
-  const systemTypes: Record<string, number> = {};
-  assets.forEach((asset) => {
-    const os = asset.operatingSystem || "Unknown";
-    systemTypes[os] = (systemTypes[os] || 0) + 1;
-  });
-
-  // Laptops per department
-  const laptopsByDept: Record<string, number> = {};
-  assets.filter((a) => a.assetName?.toLowerCase().includes("laptop")).forEach((laptop) => {
-    const dept = laptop.department || "Unassigned";
-    laptopsByDept[dept] = (laptopsByDept[dept] || 0) + 1;
-  });
-
-  const inProgressITIssues = itIssues.filter((issue) => 
-    issue.status === "In Progress" || issue.status === "Open"
-  ).length;
-
-  // Calculate total downtime
-  const calculateDowntime = (downtimeStr?: string): number => {
-    if (!downtimeStr) return 0;
-    const hoursMatch = downtimeStr.match(/(\d+)\s*hour/i);
-    const daysMatch = downtimeStr.match(/(\d+)\s*day/i);
-    let hours = 0;
-    if (hoursMatch) hours += parseInt(hoursMatch[1]);
-    if (daysMatch) hours += parseInt(daysMatch[1]) * 24;
-    return hours;
-  };
-
-  const totalDowntime = itIssues.reduce((sum, issue) => sum + calculateDowntime(issue.downtime), 0);
-
-  // Poor ratings - count critical/high severity issues
-  const poorRatings = itIssues.filter((issue) => 
-    issue.severity === "Critical" || issue.severity === "High"
-  ).length;
-
-  // Chart data
-  const issuesByCategoryData = Object.entries(issuesByCategory).map(([name, value]) => ({
-    name,
-    value,
-  }));
-
-  const systemTypesData = Object.entries(systemTypes).map(([name, value]) => ({
-    name,
-    value,
-  }));
-
-  const laptopsByDeptData = Object.entries(laptopsByDept).map(([name, value]) => ({
-    name,
-    value,
-  }));
 
   const getAnalyticCard = (id: string) => {
     switch (id) {

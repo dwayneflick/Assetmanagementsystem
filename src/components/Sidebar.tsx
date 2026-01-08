@@ -1,5 +1,6 @@
 import { User } from "../App";
 import { Button } from "./ui/button";
+import { memo } from "react";
 import {
   LayoutDashboard,
   Package,
@@ -14,6 +15,7 @@ import {
   UserCheck,
   X,
   FileWarning,
+  Laptop,
 } from "lucide-react";
 import andersenLogo from "figma:asset/c5292bdd917281e818e79b22fa402c2806ae9d2e.png";
 
@@ -26,26 +28,22 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-export default function Sidebar({ user, currentPage, onNavigate, onLogout, isOpen, onClose }: SidebarProps) {
-  const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "assets", label: "Asset Management", icon: Package },
-    { id: "asset-handover", label: "Asset Handover", icon: UserCheck },
-    { id: "incidents", label: "Incident Reports", icon: AlertTriangle },
-    { id: "software", label: "Software", icon: Code },
-    { id: "it-issue-logs", label: "IT Issue Logs", icon: FileWarning },
-    { id: "purchase-orders", label: "Purchase Orders", icon: ShoppingCart },
-    { id: "deregistration", label: "IT Deregistration", icon: UserMinus },
-    { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen },
-    { id: "reports", label: "Reports", icon: FileText },
-  ];
+// Memoize the menu items array to prevent re-creation on every render
+const menuItems = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "assets", label: "Asset Management", icon: Package },
+  { id: "incidents", label: "Incident Reports", icon: FileWarning },
+  { id: "software", label: "Software Management", icon: Laptop },
+  { id: "purchase-orders", label: "Purchase Orders", icon: ShoppingCart },
+  { id: "asset-handover", label: "Asset Handover", icon: UserCheck },
+  { id: "deregistration", label: "IT Deregistration", icon: UserMinus },
+  { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen },
+  { id: "reports", label: "Reports", icon: FileText },
+  { id: "settings", label: "Settings", icon: Settings },
+];
 
-  // Add Settings for admin users only
-  const adminMenuItems = user.role === "admin" 
-    ? [{ id: "settings", label: "Settings", icon: Settings }]
-    : [];
-
-  const allMenuItems = [...menuItems, ...adminMenuItems];
+export function Sidebar({ user, currentPage, onNavigate, onLogout, isOpen, onClose }: SidebarProps) {
+  const allMenuItems = menuItems;
 
   return (
     <>
@@ -131,3 +129,6 @@ export default function Sidebar({ user, currentPage, onNavigate, onLogout, isOpe
     </>
   );
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export default memo(Sidebar);

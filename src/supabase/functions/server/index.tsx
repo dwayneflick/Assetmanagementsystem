@@ -41,26 +41,6 @@ async function sendEmail(
   }
 
   try {
-    // TESTING MODE: Resend only allows sending to verified email in testing mode
-    // All emails will be sent to dwayneflicker@gmail.com with original recipient info in subject
-    const testingEmail = "dwayneflicker@gmail.com";
-    const originalRecipient = options.to;
-
-    // Modify subject to include original recipient for testing
-    const testingSubject = `[TO: ${originalRecipient}] ${options.subject}`;
-
-    // Add note to email body about testing mode
-    const testingHtml = `
-      <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin-bottom: 20px;">
-        <p style="margin: 0; color: #92400e; font-weight: bold;">📧 Testing Mode</p>
-        <p style="margin: 5px 0 0 0; color: #92400e; font-size: 14px;">
-          This email was intended for: <strong>${originalRecipient}</strong><br>
-          In production, verify a domain at resend.com/domains to send to actual recipients.
-        </p>
-      </div>
-      ${options.html}
-    `;
-
     const emailResponse = await fetch(
       "https://api.resend.com/emails",
       {
@@ -71,16 +51,16 @@ async function sendEmail(
         },
         body: JSON.stringify({
           from: "Asset Management System <onboarding@resend.dev>",
-          to: [testingEmail],
-          subject: testingSubject,
-          html: testingHtml,
+          to: [options.to],
+          subject: options.subject,
+          html: options.html,
         }),
       },
     );
 
     if (emailResponse.ok) {
       console.log(
-        `Email sent successfully to ${testingEmail} (intended for: ${originalRecipient})`,
+        `Email sent successfully to ${options.to}`,
       );
       return true;
     } else {
@@ -1266,20 +1246,13 @@ app.put("/make-server-5921d82e/users/:id", async (c) => {
   }
 });
 
-// Change user password (admin only)
+// Change user password
 app.put(
   "/make-server-5921d82e/users/:id/password",
   async (c) => {
     try {
       const userId = c.req.param("id");
-      const { password } = await c.req.json();
-
-      if (!password || password.length < 6) {
-        return c.json(
-          { error: "Password must be at least 6 characters" },
-          400,
-        );
-      }
+      const { password, currentPassword, newPassword } = await c.req.json();
 
       // Find user by ID
       const allUsers = await kv.getByPrefix("user:");
@@ -1289,8 +1262,43 @@ app.put(
         return c.json({ error: "User not found" }, 404);
       }
 
-      // Update password
-      user.password = password;
+      // Two modes: Admin changing password (just 'password') OR User changing own password (currentPassword + newPassword)
+      if (currentPassword && newPassword) {
+        // User changing their own password - verify current password
+        if (user.password !== currentPassword) {
+          return c.json(
+            { error: "Current password is incorrect" },
+            400,
+          );
+        }
+
+        if (newPassword.length < 6) {
+          return c.json(
+            { error: "New password must be at least 6 characters" },
+            400,
+          );
+        }
+
+        // Update password
+        user.password = newPassword;
+      } else if (password) {
+        // Admin changing user password (no current password verification needed)
+        if (password.length < 6) {
+          return c.json(
+            { error: "Password must be at least 6 characters" },
+            400,
+          );
+        }
+
+        // Update password
+        user.password = password;
+      } else {
+        return c.json(
+          { error: "Invalid request. Provide either 'password' or both 'currentPassword' and 'newPassword'" },
+          400,
+        );
+      }
+
       await kv.set(`user:${user.username}`, user);
 
       return c.json({ success: true });
@@ -1407,7 +1415,7 @@ app.post("/make-server-5921d82e/users/invite", async (c) => {
     // Try to send email if RESEND_API_KEY is configured
     const emailSent = await sendEmail({
       to: email,
-      subject: "You've been invited to Asset Management System",
+      subject: "You've been invited to join our platform",
       html: `
         <!DOCTYPE html>
         <html>
@@ -1416,84 +1424,85 @@ app.post("/make-server-5921d82e/users/invite", async (c) => {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Welcome to Asset Management System</title>
         </head>
-        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
-          <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
             <!-- Header -->
-            <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 40px 30px; border-radius: 12px 12px 0 0; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 700;">
-                🛡️ Asset Management System
+            <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 32px 24px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span style="font-size: 28px;">🛡️</span> Asset Management System
               </h1>
-              <p style="margin: 10px 0 0; color: #dbeafe; font-size: 16px;">
+              <p style="margin: 8px 0 0; color: #dbeafe; font-size: 15px;">
                 You've been invited to join our platform
               </p>
             </div>
             
             <!-- Content -->
-            <div style="background-color: #ffffff; padding: 40px 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-              <p style="margin: 0 0 20px; color: #374151; font-size: 16px; line-height: 1.6;">
+            <div style="padding: 32px 24px;">
+              <p style="margin: 0 0 16px; color: #1f2937; font-size: 15px; line-height: 1.6;">
                 Hello,
               </p>
               
-              <p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">
-                You've been invited to join our <strong>Asset Management System</strong> as a <strong style="color: ${role === "admin" ? "#7c3aed" : "#2563eb"};">${role === "admin" ? "Administrator" : "Agent"}</strong>.
+              <p style="margin: 0 0 24px; color: #4b5563; font-size: 15px; line-height: 1.6;">
+                You've been invited to join our <strong style="color: #1f2937;">Asset Management System</strong> as a <strong style="color: ${role === "admin" ? "#7c3aed" : "#2563eb"};">${role === "admin" ? "Administrator" : "Agent"}</strong>.
               </p>
               
               <!-- Credentials Box -->
-              <div style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-left: 4px solid #2563eb; padding: 24px; border-radius: 8px; margin: 24px 0;">
-                <h2 style="margin: 0 0 16px; color: #1e40af; font-size: 18px; font-weight: 600;">
-                  🔑 Your Login Credentials
+              <div style="background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 20px; border-radius: 6px; margin: 24px 0;">
+                <h2 style="margin: 0 0 16px; color: #1e40af; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                  <span>🔑</span> Your Login Credentials
                 </h2>
                 
                 <div style="margin-bottom: 12px;">
-                  <div style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
-                    Username
+                  <div style="color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600;">
+                    USERNAME
                   </div>
-                  <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 15px; color: #1f2937; font-weight: 600; border: 1px solid #cbd5e1;">
+                  <div style="background-color: #ffffff; padding: 12px 14px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 14px; color: #1f2937; font-weight: 600; border: 1px solid #cbd5e1;">
                     ${username}
                   </div>
                 </div>
                 
                 <div style="margin-bottom: 0;">
-                  <div style="color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
-                    Temporary Password
+                  <div style="color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600;">
+                    TEMPORARY PASSWORD
                   </div>
-                  <div style="background-color: #ffffff; padding: 12px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 15px; color: #1f2937; font-weight: 600; border: 1px solid #cbd5e1;">
+                  <div style="background-color: #ffffff; padding: 12px 14px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 14px; color: #1f2937; font-weight: 600; border: 1px solid #cbd5e1;">
                     ${tempPassword}
                   </div>
                 </div>
               </div>
               
               <!-- Security Notice -->
-              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin: 24px 0;">
-                <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.5;">
-                  <strong>🔒 Security Notice:</strong> Please log in and change your password immediately for security purposes. This is a temporary password.
+              <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 14px 16px; border-radius: 6px; margin: 24px 0;">
+                <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.5; display: flex; align-items: start; gap: 6px;">
+                  <span style="font-size: 16px;">🔒</span>
+                  <span><strong>Security Notice:</strong> Please log in and change your password immediately for security purposes. This is a temporary password.</span>
                 </p>
               </div>
               
-              <p style="margin: 24px 0 0; color: #374151; font-size: 16px; line-height: 1.6;">
+              <p style="margin: 24px 0 20px; color: #4b5563; font-size: 15px; line-height: 1.6;">
                 Click the button below to access the system and get started:
               </p>
               
               <!-- CTA Button -->
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${Deno.env.get("APP_URL") || "your-app-url"}" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);">
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="${Deno.env.get("APP_URL") || "https://your-app-url.com"}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 13px 28px; border-radius: 6px; font-weight: 600; font-size: 15px; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);">
                   Access Asset Management System →
                 </a>
               </div>
               
               <!-- Footer Note -->
-              <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+              <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
                 <p style="margin: 0; color: #9ca3af; font-size: 13px; line-height: 1.5;">
                   If you didn't expect this invitation or have any questions, please contact your administrator.
                 </p>
-                <p style="margin: 12px 0 0; color: #9ca3af; font-size: 13px;">
-                  <strong>Email:</strong> ${email}
+                <p style="margin: 10px 0 0; font-size: 13px;">
+                  <span style="color: #6b7280;">Email:</span> <a href="mailto:${email}" style="color: #2563eb; text-decoration: none;">${email}</a>
                 </p>
               </div>
             </div>
             
             <!-- Footer -->
-            <div style="text-align: center; margin-top: 24px; padding: 20px;">
+            <div style="background-color: #f9fafb; text-align: center; padding: 20px; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0; color: #9ca3af; font-size: 12px;">
                 © ${new Date().getFullYear()} Asset Management System. All rights reserved.
               </p>
@@ -2741,6 +2750,411 @@ app.delete("/make-server-5921d82e/notifications/:id", async (c) => {
   } catch (error) {
     console.error("Delete notification error:", error);
     return c.json({ error: "Failed to delete notification" }, 500);
+  }
+});
+
+// ============== ACCESS CONTROL ROUTES ==============
+
+// GET access control permissions
+app.get("/make-server-5921d82e/access-control", async (c) => {
+  try {
+    const permissions = await kv.get("access_control_permissions");
+    
+    // Default permissions if not set
+    const defaultPermissions = {
+      canViewStats: false,
+      canViewUserManagement: false,
+      canViewWorkflowSettings: false,
+      canViewOtherUsers: false,
+      canEditOtherUsers: false,
+      canDeleteUsers: false,
+      canAddUsers: false,
+      canSendInvites: false,
+    };
+
+    return c.json({
+      permissions: permissions || defaultPermissions,
+    });
+  } catch (error) {
+    console.error("Get access control error:", error);
+    return c.json({ error: "Failed to get access control settings" }, 500);
+  }
+});
+
+// PUT update access control permissions
+app.put("/make-server-5921d82e/access-control", async (c) => {
+  try {
+    const { permissions } = await c.req.json();
+
+    if (!permissions) {
+      return c.json({ error: "Permissions object is required" }, 400);
+    }
+
+    await kv.set("access_control_permissions", permissions);
+
+    return c.json({ success: true, permissions });
+  } catch (error) {
+    console.error("Update access control error:", error);
+    return c.json({ error: "Failed to update access control settings" }, 500);
+  }
+});
+
+// ============== BULK UPLOAD ROUTES ==============
+
+// Bulk upload for various modules
+app.post("/make-server-5921d82e/bulk-upload/:module", async (c) => {
+  try {
+    const module = c.req.param("module");
+    
+    // Get the uploaded file from form data
+    const formData = await c.req.formData();
+    const file = formData.get("file") as File;
+    
+    if (!file) {
+      return c.json({ error: "No file uploaded" }, 400);
+    }
+
+    // Read CSV content
+    const csvText = await file.text();
+    const lines = csvText.split("\n").filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      return c.json({ error: "CSV file is empty or has no data rows" }, 400);
+    }
+
+    const headers = lines[0].split(",").map(h => h.trim());
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    // Process each data row
+    for (let i = 1; i < lines.length && i <= 1000; i++) {
+      try {
+        const values = lines[i].split(",").map(v => v.trim());
+        const record: any = {};
+        
+        headers.forEach((header, index) => {
+          record[header] = values[index] || "";
+        });
+
+        // Generate ID and timestamp
+        const id = crypto.randomUUID();
+        const timestamp = new Date().toISOString();
+
+        // Save based on module type
+        switch (module) {
+          case "assets":
+            await kv.set(`asset:${id}`, {
+              id,
+              assetName: record["Asset Name"],
+              serviceTag: record["Service Tag"],
+              productType: record["Product Type"],
+              assetState: record["Asset State"],
+              user: record["User"],
+              department: record["Department"],
+              acquisitionDate: record["Acquisition Date"],
+              vendor: record["Vendor"],
+              cost: parseFloat(record["Cost (₦)"] || "0"),
+              warrantyExpiry: record["Warranty Expiry"],
+              processor: record["Processor"],
+              ram: record["RAM"],
+              storage: record["Storage"],
+              os: record["OS"],
+              notes: record["Notes"],
+              createdAt: timestamp,
+            });
+            success++;
+            break;
+
+          case "software":
+            await kv.set(`software:${id}`, {
+              id,
+              name: record["Software Name"],
+              version: record["Version"],
+              vendor: record["Vendor"],
+              licenseType: record["License Type"],
+              licenseKey: record["License Key"],
+              numberOfLicenses: parseInt(record["Number of Licenses"] || "0"),
+              purchaseDate: record["Purchase Date"],
+              expiryDate: record["Expiry Date"],
+              cost: parseFloat(record["Cost (₦)"] || "0"),
+              assignedTo: record["Assigned To"],
+              status: record["Status"],
+              notes: record["Notes"],
+              createdAt: timestamp,
+            });
+            success++;
+            break;
+
+          case "incidents":
+            await kv.set(`incident:${id}`, {
+              id,
+              incidentId: `INC-${Date.now()}`,
+              title: record["Title"],
+              description: record["Description"],
+              priority: record["Priority"],
+              category: record["Category"],
+              reportedBy: record["Reported By"],
+              assignedTo: record["Assigned To"],
+              status: record["Status"],
+              location: record["Location"],
+              createdAt: timestamp,
+            });
+            success++;
+            break;
+
+          case "purchase-orders":
+            await kv.set(`purchase_order:${id}`, {
+              id,
+              poNumber: `PO-${Date.now()}`,
+              itemName: record["Item Name"],
+              quantity: parseInt(record["Quantity"] || "0"),
+              unitPrice: parseFloat(record["Unit Price (₦)"] || "0"),
+              totalAmount: parseFloat(record["Total Amount (₦)"] || "0"),
+              vendor: record["Vendor"],
+              requestedBy: record["Requested By"],
+              department: record["Department"],
+              priority: record["Priority"],
+              justification: record["Justification"],
+              status: "Pending",
+              createdAt: timestamp,
+            });
+            success++;
+            break;
+
+          case "handover":
+            await kv.set(`handover:${id}`, {
+              id,
+              assetName: record["Asset Name"],
+              serialNumber: record["Serial Number"],
+              productType: record["Product Type"],
+              handedTo: record["Handed To"],
+              department: record["Department"],
+              handoverDate: record["Handover Date"],
+              condition: record["Condition"],
+              notes: record["Notes"],
+              status: "Completed",
+              createdAt: timestamp,
+            });
+            success++;
+            break;
+
+          case "deregistration":
+            await kv.set(`deregistration:${id}`, {
+              id,
+              assetName: record["Asset Name"],
+              serialNumber: record["Serial Number"],
+              productType: record["Product Type"],
+              previousUser: record["Previous User"],
+              department: record["Department"],
+              deregistrationDate: record["Deregistration Date"],
+              reason: record["Reason"],
+              assetCondition: record["Asset Condition"],
+              disposalMethod: record["Disposal Method"],
+              notes: record["Notes"],
+              status: "Completed",
+              createdAt: timestamp,
+            });
+            success++;
+            break;
+
+          default:
+            failed++;
+            errors.push(`Row ${i}: Unsupported module type`);
+        }
+      } catch (error) {
+        failed++;
+        errors.push(`Row ${i}: ${error.message}`);
+      }
+    }
+
+    return c.json({
+      success,
+      failed,
+      errors: errors.slice(0, 10), // Return first 10 errors only
+      message: `Processed ${success + failed} records`,
+    });
+  } catch (error) {
+    console.error("Bulk upload error:", error);
+    return c.json({ error: "Failed to process bulk upload" }, 500);
+  }
+});
+
+// ============== LOGS ROUTES ==============
+
+// POST error log
+app.post("/make-server-5921d82e/log-error", async (c) => {
+  try {
+    const errorLog = await c.req.json();
+    const logId = errorLog.id || `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await kv.set(`error_log:${logId}`, errorLog);
+    return c.json({ success: true, id: logId });
+  } catch (error) {
+    console.error("Log error failed:", error);
+    return c.json({ error: "Failed to log error" }, 500);
+  }
+});
+
+// POST audit log
+app.post("/make-server-5921d82e/log-audit", async (c) => {
+  try {
+    const auditLog = await c.req.json();
+    const logId = auditLog.id || `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await kv.set(`audit_log:${logId}`, auditLog);
+    return c.json({ success: true, id: logId });
+  } catch (error) {
+    console.error("Log audit failed:", error);
+    return c.json({ error: "Failed to log audit" }, 500);
+  }
+});
+
+// POST seed demo logs
+app.post("/make-server-5921d82e/seed-demo-logs", async (c) => {
+  try {
+    const now = Date.now();
+    const errorLogs = [];
+    const auditLogs = [];
+
+    // Create sample error logs
+    const errorSamples = [
+      { severity: "critical", module: "Authentication", message: "Database connection timeout during user login", user: "System" },
+      { severity: "error", module: "Asset Management", message: "Failed to upload asset image: File size exceeds limit", user: "Lateef" },
+      { severity: "error", module: "Purchase Orders", message: "Email service unavailable for PO approval notification", user: "System" },
+      { severity: "warning", module: "Software Management", message: "License expiry warning not sent: Invalid email address", user: "Kelvin" },
+      { severity: "warning", module: "Incident Reports", message: "Duplicate incident ID detected and auto-corrected", user: "System" },
+      { severity: "critical", module: "Database", message: "KV store connection pool exhausted", user: "System" },
+      { severity: "error", module: "Asset Handover", message: "Document generation failed: Template not found", user: "Mosun" },
+      { severity: "info", module: "Data Management", message: "Bulk CSV upload completed with 3 validation warnings", user: "Admin" },
+      { severity: "warning", module: "User Management", message: "Password change attempt failed: Current password incorrect", user: "Kelvin" },
+      { severity: "error", module: "IT Deregistration", message: "Asset not found in inventory during deregistration", user: "Lateef" },
+      { severity: "critical", module: "Authentication", message: "Multiple failed login attempts detected from same IP", user: "System" },
+      { severity: "error", module: "Notifications", message: "Push notification service returned 503 error", user: "System" },
+      { severity: "warning", module: "Software Management", message: "Software license count mismatch detected", user: "System" },
+      { severity: "info", module: "Asset Management", message: "Scheduled backup completed successfully", user: "System" },
+      { severity: "error", module: "Purchase Orders", message: "PO approval timeout: No response from approver", user: "System" },
+    ];
+
+    for (let i = 0; i < errorSamples.length; i++) {
+      const sample = errorSamples[i];
+      const logId = `error_${now + i}_${Math.random().toString(36).substr(2, 9)}`;
+      const errorLog = {
+        id: logId,
+        timestamp: new Date(now - (i * 3600000)).toISOString(),
+        severity: sample.severity,
+        module: sample.module,
+        errorMessage: sample.message,
+        user: sample.user,
+        action: "System Operation",
+      };
+      await kv.set(`error_log:${logId}`, errorLog);
+      errorLogs.push(errorLog);
+    }
+
+    // Create sample audit logs
+    const auditSamples = [
+      { user: "Admin", action: "Login", module: "Authentication", details: "User logged in successfully", status: "success" },
+      { user: "Lateef", action: "Create", module: "Asset Management", details: "Created asset: Dell Latitude 5420 (AST-2024-001)", status: "success" },
+      { user: "Kelvin", action: "Login", module: "Authentication", details: "Login failed: Invalid password", status: "failed" },
+      { user: "Mosun", action: "Update", module: "Incident Reports", details: "Updated incident #INC-2024-045 status to Resolved", status: "success" },
+      { user: "Admin", action: "Delete", module: "User Management", details: "Deleted user: testuser", status: "success" },
+      { user: "Lateef", action: "Create", module: "Purchase Orders", details: "Created PO #PO-2024-089 for HP Monitors", status: "success" },
+      { user: "Kelvin", action: "Update", module: "Software Management", details: "Updated Microsoft Office license count", status: "success" },
+      { user: "Mosun", action: "Create", module: "Asset Handover", details: "Initiated handover for asset AST-2024-001", status: "success" },
+      { user: "Admin", action: "Update", module: "Access Control", details: "Modified agent permissions", status: "success" },
+      { user: "Lateef", action: "Delete", module: "Asset Management", details: "Delete failed: Insufficient permissions", status: "failed" },
+      { user: "Kingsley", action: "Login", module: "Authentication", details: "User logged in successfully", status: "success" },
+      { user: "Kelvin", action: "Create", module: "IT Deregistration", details: "Registered asset for decommission: AST-2023-155", status: "success" },
+      { user: "Admin", action: "Upload", module: "Data Management", details: "Bulk uploaded 45 assets via CSV", status: "success" },
+      { user: "Mosun", action: "Update", module: "Settings", details: "Updated profile information", status: "success" },
+      { user: "Lateef", action: "Create", module: "Incident Reports", details: "Reported incident: Network outage in Building A", status: "success" },
+      { user: "Kelvin", action: "Update", module: "Purchase Orders", details: "Update failed: PO already approved", status: "failed" },
+      { user: "Admin", action: "Create", module: "User Management", details: "Created new user: newagent", status: "success" },
+      { user: "Mosun", action: "Login", module: "Authentication", details: "Login failed: Account locked", status: "failed" },
+      { user: "Kingsley", action: "Delete", module: "Incident Reports", details: "Deleted incident #INC-2024-001", status: "success" },
+      { user: "Admin", action: "Clear", module: "System Logs", details: "Cleared all error logs", status: "success" },
+    ];
+
+    for (let i = 0; i < auditSamples.length; i++) {
+      const sample = auditSamples[i];
+      const logId = `audit_${now + i}_${Math.random().toString(36).substr(2, 9)}`;
+      const auditLog = {
+        id: logId,
+        timestamp: new Date(now - (i * 2400000)).toISOString(),
+        user: sample.user,
+        action: sample.action,
+        module: sample.module,
+        details: sample.details,
+        status: sample.status,
+        ipAddress: `192.168.1.${Math.floor(Math.random() * 255)}`,
+      };
+      await kv.set(`audit_log:${logId}`, auditLog);
+      auditLogs.push(auditLog);
+    }
+
+    return c.json({ 
+      success: true, 
+      created: {
+        errorLogs: errorLogs.length,
+        auditLogs: auditLogs.length
+      }
+    });
+  } catch (error) {
+    console.error("Seed demo logs error:", error);
+    return c.json({ error: "Failed to seed demo logs" }, 500);
+  }
+});
+
+// GET error logs
+app.get("/make-server-5921d82e/logs/errors", async (c) => {
+  try {
+    const logsData = await kv.getByPrefix("error_log:");
+    const logs = logsData.map((item) => item.value).sort((a: any, b: any) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    return c.json({ logs });
+  } catch (error) {
+    console.error("Get error logs error:", error);
+    return c.json({ error: "Failed to get error logs" }, 500);
+  }
+});
+
+// GET audit logs
+app.get("/make-server-5921d82e/logs/audit", async (c) => {
+  try {
+    const logsData = await kv.getByPrefix("audit_log:");
+    const logs = logsData.map((item) => item.value).sort((a: any, b: any) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    return c.json({ logs });
+  } catch (error) {
+    console.error("Get audit logs error:", error);
+    return c.json({ error: "Failed to get audit logs" }, 500);
+  }
+});
+
+// DELETE all error logs
+app.delete("/make-server-5921d82e/logs/errors", async (c) => {
+  try {
+    const logsData = await kv.getByPrefix("error_log:");
+    const keys = logsData.map((item) => item.key);
+    await kv.mdel(keys);
+    return c.json({ success: true, deleted: keys.length });
+  } catch (error) {
+    console.error("Delete error logs error:", error);
+    return c.json({ error: "Failed to delete error logs" }, 500);
+  }
+});
+
+// DELETE all audit logs
+app.delete("/make-server-5921d82e/logs/audit", async (c) => {
+  try {
+    const logsData = await kv.getByPrefix("audit_log:");
+    const keys = logsData.map((item) => item.key);
+    await kv.mdel(keys);
+    return c.json({ success: true, deleted: keys.length });
+  } catch (error) {
+    console.error("Delete audit logs error:", error);
+    return c.json({ error: "Failed to delete audit logs" }, 500);
   }
 });
 

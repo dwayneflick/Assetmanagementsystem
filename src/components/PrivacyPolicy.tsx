@@ -327,7 +327,7 @@ export default function PrivacyPolicy({ onClose }: PrivacyPolicyProps) {
             {/* Footer */}
             <div className="text-center pt-6 border-t border-gray-200">
               <p className="text-xs sm:text-sm text-gray-600">
-                © 2025 Andersen Tax LLC and Andersen Tax LP. All Rights Reserved.
+                © {new Date().getFullYear()} Andersen Tax LLC and Andersen Tax LP. All Rights Reserved.
               </p>
             </div>
           </CardContent>
