@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Badge } from "./ui/badge";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
-import { Plus, Edit, Trash2, Eye, History, Package } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, History, Package, Star, Filter, X as XIcon } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 
 interface AssetManagementProps {
@@ -43,6 +43,8 @@ interface Asset {
   site: string;
   function: string;
   serialNumber: string;
+  deviceHistory: string;
+  previousUser: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,9 +68,37 @@ const UNITS = [
   "Forensic, Cybersecurity and Compliance Services",
   "Accounting Advisory", "F&A", "HR", "M&B", "ITS"
 ];
-const PRODUCT_TYPES = ["Hardware", "Software", "Network"];
-const ASSET_STATES = ["Faulty", "Disposed", "In Use/Active", "Retired", "Unassigned"];
+const PRODUCT_TYPES = ["Hardware", "Software", "Network", "Others"];
+const ASSET_STATES = ["Faulty", "Disposed", "In Use/Active", "Retired", "Unassigned", "Stolen"];
 const CONDITION_OPTIONS = ["Good condition", "Poor condition", "Bad condition"];
+const OS_OPTIONS = ["Windows", "MacOS", "Linux", "Others"];
+
+const StarRating = ({ value, onChange }: { value: number; onChange: (val: number) => void }) => {
+  const [hovered, setHovered] = useState(0);
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          className="p-0 focus:outline-none"
+          onMouseEnter={() => setHovered(star)}
+          onMouseLeave={() => setHovered(0)}
+          onClick={() => onChange(star)}
+        >
+          <Star
+            className={`w-6 h-6 cursor-pointer transition-colors ${
+              star <= (hovered || value)
+                ? "fill-yellow-400 text-yellow-400"
+                : "text-gray-300"
+            }`}
+          />
+        </button>
+      ))}
+      {value > 0 && <span className="text-sm text-gray-500 ml-2">{value}/5</span>}
+    </div>
+  );
+};
 
 export default function AssetManagement({ user }: AssetManagementProps) {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -80,6 +110,19 @@ export default function AssetManagement({ user }: AssetManagementProps) {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [assetHistory, setAssetHistory] = useState<AssetHistory[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Column filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    productType: "",
+    assetState: "",
+    department: "",
+    vendor: "",
+    os: "",
+    acqDate: "",
+    deviceHistory: "",
+    rating: "",
+  });
 
   const emptyAsset: Partial<Asset> = {
     assetName: "",
@@ -102,6 +145,8 @@ export default function AssetManagement({ user }: AssetManagementProps) {
     serialNumber: "",
     warrantyStartDate: "",
     warrantyExpiry: "",
+    deviceHistory: "",
+    previousUser: "",
   };
 
   const [formData, setFormData] = useState<Partial<Asset>>(emptyAsset);
@@ -231,7 +276,7 @@ export default function AssetManagement({ user }: AssetManagementProps) {
   };
 
   const handleDeleteAsset = async (id: string) => {
-    if (user.role !== "admin") {
+    if (user.role !== "admin" && user.name !== "Admin" && user.name !== "Kingsley") {
       toast.error("Only admins can delete assets");
       return;
     }
@@ -274,11 +319,49 @@ export default function AssetManagement({ user }: AssetManagementProps) {
     setShowHistoryDialog(true);
   };
 
-  const filteredAssets = assets.filter((asset) =>
-    Object.values(asset).some((value) =>
-      String(value).toLowerCase().includes(searchTerm.toLowerCase())
-    )
-  );
+  // Derive unique values for dynamic filter dropdowns
+  const uniqueVendors = useMemo(() => [...new Set(assets.map(a => a.vendor).filter(Boolean))].sort(), [assets]);
+  const uniqueYears = useMemo(() => [...new Set(assets.map(a => a.acqDate?.slice(0, 4)).filter(Boolean))].sort().reverse(), [assets]);
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+
+  const clearAllFilters = () => {
+    setFilters({
+      productType: "",
+      assetState: "",
+      department: "",
+      vendor: "",
+      os: "",
+      acqDate: "",
+      deviceHistory: "",
+      rating: "",
+    });
+    setSearchTerm("");
+  };
+
+  const filteredAssets = useMemo(() => {
+    return assets.filter((asset) => {
+      // Text search
+      if (searchTerm) {
+        const matches = Object.values(asset).some((value) =>
+          String(value).toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        if (!matches) return false;
+      }
+
+      // Column filters
+      if (filters.productType && asset.productType !== filters.productType) return false;
+      if (filters.assetState && asset.assetState !== filters.assetState) return false;
+      if (filters.department && asset.department !== filters.department) return false;
+      if (filters.vendor && asset.vendor !== filters.vendor) return false;
+      if (filters.os && asset.os !== filters.os) return false;
+      if (filters.acqDate && (!asset.acqDate || !asset.acqDate.startsWith(filters.acqDate))) return false;
+      if (filters.deviceHistory && asset.deviceHistory !== filters.deviceHistory) return false;
+      if (filters.rating && asset.rating !== filters.rating) return false;
+
+      return true;
+    });
+  }, [assets, searchTerm, filters]);
 
   const getAssetStateColor = (state: string) => {
     switch (state) {
@@ -292,6 +375,8 @@ export default function AssetManagement({ user }: AssetManagementProps) {
         return "bg-gray-100 text-gray-800";
       case "Disposed":
         return "bg-gray-100 text-gray-800";
+      case "Stolen":
+        return "bg-red-100 text-red-800";
       default:
         return "bg-blue-100 text-blue-800";
     }
@@ -316,6 +401,7 @@ export default function AssetManagement({ user }: AssetManagementProps) {
           <h1 className="text-2xl sm:text-3xl mb-2">Asset Management</h1>
           <p className="text-sm sm:text-base text-gray-600">Manage and track all organizational assets</p>
         </div>
+        {user.role !== "viewer" && (
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-to-r from-red-900 to-rose-900 hover:from-red-800 hover:to-rose-800 w-full sm:w-auto" onClick={() => setFormData(emptyAsset)}>
@@ -456,20 +542,29 @@ export default function AssetManagement({ user }: AssetManagementProps) {
 
               <div className="space-y-2">
                 <Label htmlFor="rating">Rating</Label>
-                <Input
-                  id="rating"
-                  value={formData.rating || ""}
-                  onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                <StarRating
+                  value={parseInt(formData.rating || "0")}
+                  onChange={(value) => setFormData({ ...formData, rating: value.toString() })}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="os">Operating System</Label>
-                <Input
-                  id="os"
+                <Select
                   value={formData.os || ""}
-                  onChange={(e) => setFormData({ ...formData, os: e.target.value })}
-                />
+                  onValueChange={(value) => setFormData({ ...formData, os: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select OS" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OS_OPTIONS.map((os) => (
+                      <SelectItem key={os} value={os}>
+                        {os}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -530,13 +625,43 @@ export default function AssetManagement({ user }: AssetManagementProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="site">Site</Label>
+                <Label htmlFor="site">Location</Label>
                 <Input
                   id="site"
                   value={formData.site || ""}
                   onChange={(e) => setFormData({ ...formData, site: e.target.value })}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="deviceHistory">Device History</Label>
+                <Select
+                  value={formData.deviceHistory || ""}
+                  onValueChange={(value) => setFormData({ ...formData, deviceHistory: value, previousUser: value === "New" ? "" : formData.previousUser || "" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select device history" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Previously Used">Previously Used</SelectItem>
+                    <SelectItem value="New">New</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.deviceHistory === "Previously Used" && (
+                <div className="space-y-2 col-span-2">
+                  <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Previous User</h4>
+                    <Input
+                      id="previousUser"
+                      placeholder="Enter the name of the previous user"
+                      value={formData.previousUser || ""}
+                      onChange={(e) => setFormData({ ...formData, previousUser: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="function">Function</Label>
@@ -555,17 +680,255 @@ export default function AssetManagement({ user }: AssetManagementProps) {
             </div>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
-      {/* Search */}
+      {/* Search & Filters */}
       <Card>
-        <CardContent className="p-4">
-          <Input
-            placeholder="Search assets by name, tag, user, department..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full"
-          />
+        <CardContent className="p-4 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Input
+              placeholder="Search assets by name, tag, user, department..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1"
+            />
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center gap-2 w-full sm:w-auto"
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge className="bg-gradient-to-r from-red-900 to-rose-900 text-white ml-1 text-xs px-1.5 py-0.5">
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+            {(activeFilterCount > 0 || searchTerm) && (
+              <Button
+                variant="ghost"
+                onClick={clearAllFilters}
+                className="text-red-600 hover:text-red-700 w-full sm:w-auto"
+              >
+                <XIcon className="w-4 h-4 mr-1" />
+                Clear All
+              </Button>
+            )}
+          </div>
+
+          {/* Active Filter Tags */}
+          {activeFilterCount > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {filters.productType && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  Type: {filters.productType}
+                  <button onClick={() => setFilters({ ...filters, productType: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+              {filters.assetState && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  State: {filters.assetState}
+                  <button onClick={() => setFilters({ ...filters, assetState: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+              {filters.department && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  Dept: {filters.department}
+                  <button onClick={() => setFilters({ ...filters, department: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+              {filters.vendor && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  Vendor: {filters.vendor}
+                  <button onClick={() => setFilters({ ...filters, vendor: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+              {filters.os && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  OS: {filters.os}
+                  <button onClick={() => setFilters({ ...filters, os: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+              {filters.acqDate && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  Year: {filters.acqDate}
+                  <button onClick={() => setFilters({ ...filters, acqDate: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+              {filters.deviceHistory && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  History: {filters.deviceHistory}
+                  <button onClick={() => setFilters({ ...filters, deviceHistory: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+              {filters.rating && (
+                <Badge variant="secondary" className="flex items-center gap-1 px-2 py-1">
+                  Rating: {filters.rating} star{filters.rating !== "1" ? "s" : ""}
+                  <button onClick={() => setFilters({ ...filters, rating: "" })} className="ml-1 hover:text-red-600"><XIcon className="w-3 h-3" /></button>
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* Expandable Filter Panel */}
+          {showFilters && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Filter className="w-4 h-4" /> Filter by Column
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Showing {filteredAssets.length} of {assets.length} assets
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Product Type</Label>
+                  <Select
+                    value={filters.productType || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, productType: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      {PRODUCT_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Asset State</Label>
+                  <Select
+                    value={filters.assetState || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, assetState: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All States" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {ASSET_STATES.map((state) => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Department</Label>
+                  <Select
+                    value={filters.department || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, department: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Departments</SelectItem>
+                      {DEPARTMENTS.map((dept) => (
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Vendor</Label>
+                  <Select
+                    value={filters.vendor || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, vendor: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All Vendors" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Vendors</SelectItem>
+                      {uniqueVendors.map((vendor) => (
+                        <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Operating System</Label>
+                  <Select
+                    value={filters.os || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, os: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All OS" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All OS</SelectItem>
+                      {OS_OPTIONS.map((os) => (
+                        <SelectItem key={os} value={os}>{os}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Acquisition Year</Label>
+                  <Select
+                    value={filters.acqDate || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, acqDate: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All Years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Years</SelectItem>
+                      {uniqueYears.map((year) => (
+                        <SelectItem key={year} value={year}>{year}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Device History</Label>
+                  <Select
+                    value={filters.deviceHistory || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, deviceHistory: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="Previously Used">Previously Used</SelectItem>
+                      <SelectItem value="New">New</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Rating</Label>
+                  <Select
+                    value={filters.rating || "all"}
+                    onValueChange={(value) => setFilters({ ...filters, rating: value === "all" ? "" : value })}
+                  >
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="All Ratings" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Ratings</SelectItem>
+                      {["1", "2", "3", "4", "5"].map((r) => (
+                        <SelectItem key={r} value={r}>{r} Star{r !== "1" ? "s" : ""}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -592,13 +955,14 @@ export default function AssetManagement({ user }: AssetManagementProps) {
                   <TableHead className="whitespace-nowrap">RAM</TableHead>
                   <TableHead className="whitespace-nowrap">Manufacturer</TableHead>
                   <TableHead className="whitespace-nowrap">Serial Number</TableHead>
+                  <TableHead className="whitespace-nowrap">Device History</TableHead>
                   <TableHead className="whitespace-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredAssets.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={17} className="text-center text-gray-500 py-8">
+                    <TableCell colSpan={18} className="text-center text-gray-500 py-8">
                       No assets found
                     </TableCell>
                   </TableRow>
@@ -619,12 +983,35 @@ export default function AssetManagement({ user }: AssetManagementProps) {
                       <TableCell className="whitespace-nowrap">{asset.acqDate || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{asset.vendor || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">₦{asset.cost?.toLocaleString() || 0}</TableCell>
-                      <TableCell className="whitespace-nowrap">{asset.rating || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {asset.rating ? (
+                          <span className="flex items-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`w-3.5 h-3.5 ${
+                                  star <= parseInt(asset.rating)
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
+                          </span>
+                        ) : "-"}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">{asset.os || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{asset.processor || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{asset.ram || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{asset.manufacturer || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap">{asset.serialNumber || "-"}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span>{asset.deviceHistory || "-"}</span>
+                          {asset.deviceHistory === "Previously Used" && asset.previousUser && (
+                            <span className="text-xs text-gray-500">Prev: {asset.previousUser}</span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <div className="flex items-center space-x-2">
                           <Button
@@ -634,13 +1021,15 @@ export default function AssetManagement({ user }: AssetManagementProps) {
                           >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openEditDialog(asset)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
+                          {user.role !== "viewer" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openEditDialog(asset)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -648,7 +1037,7 @@ export default function AssetManagement({ user }: AssetManagementProps) {
                           >
                             <History className="w-4 h-4" />
                           </Button>
-                          {user.role === "admin" && (
+                          {(user.role === "admin" || user.name === "Admin" || user.name === "Kingsley") && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -803,20 +1192,29 @@ export default function AssetManagement({ user }: AssetManagementProps) {
 
             <div className="space-y-2">
               <Label htmlFor="edit-rating">Rating</Label>
-              <Input
-                id="edit-rating"
-                value={formData.rating || ""}
-                onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+              <StarRating
+                value={parseInt(formData.rating || "0")}
+                onChange={(value) => setFormData({ ...formData, rating: value.toString() })}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="edit-os">Operating System</Label>
-              <Input
-                id="edit-os"
+              <Select
                 value={formData.os || ""}
-                onChange={(e) => setFormData({ ...formData, os: e.target.value })}
-              />
+                onValueChange={(value) => setFormData({ ...formData, os: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select OS" />
+                </SelectTrigger>
+                <SelectContent>
+                  {OS_OPTIONS.map((os) => (
+                    <SelectItem key={os} value={os}>
+                      {os}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -877,13 +1275,43 @@ export default function AssetManagement({ user }: AssetManagementProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-site">Site</Label>
+              <Label htmlFor="edit-site">Location</Label>
               <Input
                 id="edit-site"
                 value={formData.site || ""}
                 onChange={(e) => setFormData({ ...formData, site: e.target.value })}
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-deviceHistory">Device History</Label>
+              <Select
+                value={formData.deviceHistory || ""}
+                onValueChange={(value) => setFormData({ ...formData, deviceHistory: value, previousUser: value === "New" ? "" : formData.previousUser || "" })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select device history" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Previously Used">Previously Used</SelectItem>
+                  <SelectItem value="New">New</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.deviceHistory === "Previously Used" && (
+              <div className="space-y-2 col-span-2">
+                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Previous User</h4>
+                  <Input
+                    id="edit-previousUser"
+                    placeholder="Enter the name of the previous user"
+                    value={formData.previousUser || ""}
+                    onChange={(e) => setFormData({ ...formData, previousUser: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2 col-span-2">
               <Label htmlFor="edit-function">Function</Label>
@@ -908,6 +1336,7 @@ export default function AssetManagement({ user }: AssetManagementProps) {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Asset Details</DialogTitle>
+            <DialogDescription>View complete asset information</DialogDescription>
           </DialogHeader>
           {selectedAsset && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-h-[70vh] overflow-y-auto p-4">
@@ -967,7 +1396,23 @@ export default function AssetManagement({ user }: AssetManagementProps) {
 
               <div className="space-y-1">
                 <p className="text-sm text-gray-500">Rating</p>
-                <p className="text-sm">{selectedAsset.rating || "-"}</p>
+                <p className="text-sm">
+                  {selectedAsset.rating ? (
+                    <span className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`w-4 h-4 ${
+                            star <= parseInt(selectedAsset.rating)
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-gray-300"
+                          }`}
+                        />
+                      ))}
+                      <span className="ml-1 text-gray-500">{selectedAsset.rating}/5</span>
+                    </span>
+                  ) : "-"}
+                </p>
               </div>
 
               <div className="space-y-1">
@@ -1006,9 +1451,23 @@ export default function AssetManagement({ user }: AssetManagementProps) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-sm text-gray-500">Site</p>
+                <p className="text-sm text-gray-500">Location</p>
                 <p className="text-sm">{selectedAsset.site || "-"}</p>
               </div>
+
+              <div className="space-y-1">
+                <p className="text-sm text-gray-500">Device History</p>
+                <p className="text-sm">{selectedAsset.deviceHistory || "-"}</p>
+              </div>
+
+              {selectedAsset.deviceHistory === "Previously Used" && selectedAsset.previousUser && (
+                <div className="space-y-1 col-span-2">
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm text-gray-500 font-semibold">Previous User</p>
+                    <p className="text-sm mt-1">{selectedAsset.previousUser}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1 col-span-2">
                 <p className="text-sm text-gray-500">Function</p>

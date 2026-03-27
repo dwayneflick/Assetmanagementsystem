@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { User } from "../App";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -27,8 +27,11 @@ export default function Notifications({ user }: NotificationsProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
 
   useEffect(() => {
+    retryCountRef.current = 0;
     fetchNotifications();
   }, [user.id]);
 
@@ -40,10 +43,21 @@ export default function Notifications({ user }: NotificationsProps) {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         }
       );
+      if (!response.ok) {
+        throw new Error(`Server responded with status ${response.status}`);
+      }
       const data = await response.json();
       setNotifications(data.notifications || []);
+      retryCountRef.current = 0;
     } catch (error) {
       console.error("Error fetching notifications:", error);
+      if (retryCountRef.current < maxRetries) {
+        retryCountRef.current++;
+        const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 8000);
+        setTimeout(fetchNotifications, delay);
+        return;
+      }
+      setNotifications([]);
     } finally {
       setLoading(false);
     }

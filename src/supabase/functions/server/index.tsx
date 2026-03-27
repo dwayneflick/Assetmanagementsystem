@@ -124,13 +124,53 @@ const initializeUsers = async () => {
         role: "agent",
         name: "Mosun",
       },
+      {
+        id: "6",
+        username: "finance1",
+        password: "P@ssw0rd",
+        role: "viewer",
+        name: "Finance User 1",
+        department: "Finance",
+      },
+      {
+        id: "7",
+        username: "finance2",
+        password: "P@ssw0rd",
+        role: "viewer",
+        name: "Finance User 2",
+        department: "Finance",
+      },
+      {
+        id: "8",
+        username: "finance",
+        password: "P@ssw0rd",
+        role: "viewer",
+        name: "Finance",
+        department: "Finance",
+      },
     ];
 
     for (const user of defaultUsers) {
       await kv.set(`user:${user.username}`, user);
     }
     await kv.set("users_initialized", true);
-    await kv.set("user_id_counter", 5);
+    await kv.set("user_id_counter", 8);
+  }
+
+  // Patch: ensure the Finance viewer user exists even if already initialized
+  const financeUser = await kv.get("user:finance");
+  if (!financeUser) {
+    const counter = (await kv.get("user_id_counter")) || 7;
+    const newId = String(Number(counter) + 1);
+    await kv.set("user:finance", {
+      id: newId,
+      username: "finance",
+      password: "P@ssw0rd",
+      role: "viewer",
+      name: "Finance",
+      department: "Finance",
+    });
+    await kv.set("user_id_counter", Number(newId));
   }
 };
 
@@ -2281,6 +2321,56 @@ app.post("/make-server-5921d82e/deregistrations", async (c) => {
   }
 });
 
+app.put("/make-server-5921d82e/deregistrations/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const updates = await c.req.json();
+
+    const deregistration = await kv.get(`deregistration:${id}`);
+    if (!deregistration) {
+      return c.json({ error: "Deregistration not found" }, 404);
+    }
+
+    const updatedDeregistration = {
+      ...deregistration,
+      ...updates,
+      id, // Preserve the ID
+      updatedAt: new Date().toISOString(),
+    };
+
+    await kv.set(`deregistration:${id}`, updatedDeregistration);
+
+    return c.json({ deregistration: updatedDeregistration });
+  } catch (error) {
+    console.error("Update deregistration error:", error);
+    return c.json(
+      { error: "Failed to update deregistration" },
+      500,
+    );
+  }
+});
+
+app.delete("/make-server-5921d82e/deregistrations/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+
+    const deregistration = await kv.get(`deregistration:${id}`);
+    if (!deregistration) {
+      return c.json({ error: "Deregistration not found" }, 404);
+    }
+
+    await kv.del(`deregistration:${id}`);
+
+    return c.json({ message: "Deregistration deleted successfully" });
+  } catch (error) {
+    console.error("Delete deregistration error:", error);
+    return c.json(
+      { error: "Failed to delete deregistration" },
+      500,
+    );
+  }
+});
+
 // ============== ASSET HANDOVER ENDPOINTS ==============
 
 app.get("/make-server-5921d82e/handovers", async (c) => {
@@ -3104,6 +3194,115 @@ app.post("/make-server-5921d82e/seed-demo-logs", async (c) => {
   }
 });
 
+// POST seed demo maintenance logs
+app.post("/make-server-5921d82e/seed-demo-maintenance", async (c) => {
+  try {
+    const maintenanceLogs = [];
+    const counter = (await kv.get("maintenance_log_id_counter")) || 0;
+    let newCounter = counter;
+
+    // Create sample maintenance logs based on the image
+    const maintenanceSamples = [
+      {
+        date: "2026-02-05",
+        assetIdName: "CCTV",
+        techName: "Kelvin",
+        actionType: "Routine",
+        descriptionOfWork: "Monitored, verified camera angles and functionality",
+        status: "Pending",
+        nextDue: "2026-02-06"
+      },
+      {
+        date: "2026-02-05",
+        assetIdName: "Printers",
+        techName: "Kelvin",
+        actionType: "Routine",
+        descriptionOfWork: "Calibrated, cleared roller debris, checked toner status and ran test page",
+        status: "Pending",
+        nextDue: "2026-02-06"
+      },
+      {
+        date: "2026-02-05",
+        assetIdName: "Access Control",
+        techName: "Lateef",
+        actionType: "Routine",
+        descriptionOfWork: "Reviewed and updated user database",
+        status: "Pending",
+        nextDue: "2026-02-06"
+      },
+      {
+        date: "2026-02-05",
+        assetIdName: "FM 200",
+        techName: "Lateef",
+        actionType: "Routine",
+        descriptionOfWork: "Monitored, Inspected and Verified",
+        status: "Pending",
+        nextDue: "2026-02-06"
+      },
+      {
+        date: "2026-02-04",
+        assetIdName: "Network Switches",
+        techName: "Kelvin",
+        actionType: "Preventive",
+        descriptionOfWork: "Firmware update and port testing",
+        status: "Completed",
+        nextDue: "2026-03-04"
+      },
+      {
+        date: "2026-02-03",
+        assetIdName: "UPS Systems",
+        techName: "Mosun",
+        actionType: "Inspection",
+        descriptionOfWork: "Battery health check and load testing",
+        status: "Completed",
+        nextDue: "2026-02-10"
+      },
+      {
+        date: "2026-02-02",
+        assetIdName: "Server Rack",
+        techName: "Lateef",
+        actionType: "Routine",
+        descriptionOfWork: "Cleaned air filters, checked cooling system",
+        status: "Completed",
+        nextDue: "2026-02-09"
+      },
+      {
+        date: "2026-02-01",
+        assetIdName: "Firewall Appliance",
+        techName: "Kelvin",
+        actionType: "Emergency",
+        descriptionOfWork: "Responded to critical security alert, updated rules",
+        status: "Completed",
+        nextDue: "2026-02-15"
+      },
+    ];
+
+    for (let i = 0; i < maintenanceSamples.length; i++) {
+      newCounter++;
+      const sample = maintenanceSamples[i];
+      const log = {
+        id: `ML${String(newCounter).padStart(4, "0")}`,
+        ...sample,
+        createdAt: new Date(sample.date).toISOString(),
+      };
+      await kv.set(`maintenance_log:${log.id}`, log);
+      maintenanceLogs.push(log);
+    }
+
+    await kv.set("maintenance_log_id_counter", newCounter);
+
+    return c.json({ 
+      success: true, 
+      created: {
+        maintenanceLogs: maintenanceLogs.length
+      }
+    });
+  } catch (error) {
+    console.error("Seed demo maintenance logs error:", error);
+    return c.json({ error: "Failed to seed demo maintenance logs" }, 500);
+  }
+});
+
 // GET error logs
 app.get("/make-server-5921d82e/logs/errors", async (c) => {
   try {
@@ -3155,6 +3354,162 @@ app.delete("/make-server-5921d82e/logs/audit", async (c) => {
   } catch (error) {
     console.error("Delete audit logs error:", error);
     return c.json({ error: "Failed to delete audit logs" }, 500);
+  }
+});
+
+// ============== IT MAINTENANCE LOG ENDPOINTS ==============
+
+app.get("/make-server-5921d82e/maintenance-logs", async (c) => {
+  try {
+    const logs = await kv.getByPrefix("maintenance_log:");
+    return c.json({ logs });
+  } catch (error) {
+    console.error("Get maintenance logs error:", error);
+    return c.json({ error: "Failed to get maintenance logs" }, 500);
+  }
+});
+
+app.post("/make-server-5921d82e/maintenance-logs", async (c) => {
+  try {
+    const logData = await c.req.json();
+    const counter = (await kv.get("maintenance_log_id_counter")) || 0;
+    const newCounter = counter + 1;
+
+    const log = {
+      id: `ML${String(newCounter).padStart(4, "0")}`,
+      ...logData,
+      createdAt: new Date().toISOString(),
+    };
+
+    await kv.set(`maintenance_log:${log.id}`, log);
+    await kv.set("maintenance_log_id_counter", newCounter);
+
+    return c.json({ log });
+  } catch (error) {
+    console.error("Create maintenance log error:", error);
+    return c.json({ error: "Failed to create maintenance log" }, 500);
+  }
+});
+
+app.put("/make-server-5921d82e/maintenance-logs/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const updates = await c.req.json();
+
+    const log = await kv.get(`maintenance_log:${id}`);
+    if (!log) {
+      return c.json({ error: "Maintenance log not found" }, 404);
+    }
+
+    const updatedLog = {
+      ...log,
+      ...updates,
+      id,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await kv.set(`maintenance_log:${id}`, updatedLog);
+
+    return c.json({ log: updatedLog });
+  } catch (error) {
+    console.error("Update maintenance log error:", error);
+    return c.json({ error: "Failed to update maintenance log" }, 500);
+  }
+});
+
+app.delete("/make-server-5921d82e/maintenance-logs/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+
+    const log = await kv.get(`maintenance_log:${id}`);
+    if (!log) {
+      return c.json({ error: "Maintenance log not found" }, 404);
+    }
+
+    await kv.del(`maintenance_log:${id}`);
+
+    return c.json({ message: "Maintenance log deleted successfully" });
+  } catch (error) {
+    console.error("Delete maintenance log error:", error);
+    return c.json({ error: "Failed to delete maintenance log" }, 500);
+  }
+});
+
+// ============== FAULTY ASSETS ENDPOINTS ==============
+
+app.get("/make-server-5921d82e/faulty-assets", async (c) => {
+  try {
+    const records = await kv.getByPrefix("faulty_record:");
+    return c.json({ records });
+  } catch (error) {
+    console.error("Get faulty asset records error:", error);
+    return c.json({ error: "Failed to get faulty asset records" }, 500);
+  }
+});
+
+app.post("/make-server-5921d82e/faulty-assets", async (c) => {
+  try {
+    const recordData = await c.req.json();
+    const counter = (await kv.get("faulty_record_counter")) || 0;
+    const newCounter = counter + 1;
+    const recordId = `FA-${String(newCounter).padStart(4, "0")}`;
+
+    const record = {
+      id: recordId,
+      ...recordData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await kv.set(`faulty_record:${recordId}`, record);
+    await kv.set("faulty_record_counter", newCounter);
+
+    return c.json({ record });
+  } catch (error) {
+    console.error("Create faulty asset record error:", error);
+    return c.json({ error: "Failed to create faulty asset record" }, 500);
+  }
+});
+
+app.put("/make-server-5921d82e/faulty-assets/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const updates = await c.req.json();
+
+    const record = await kv.get(`faulty_record:${id}`);
+    if (!record) {
+      return c.json({ error: "Faulty asset record not found" }, 404);
+    }
+
+    const updatedRecord = {
+      ...record,
+      ...updates,
+      id,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await kv.set(`faulty_record:${id}`, updatedRecord);
+    return c.json({ record: updatedRecord });
+  } catch (error) {
+    console.error("Update faulty asset record error:", error);
+    return c.json({ error: "Failed to update faulty asset record" }, 500);
+  }
+});
+
+app.delete("/make-server-5921d82e/faulty-assets/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+
+    const record = await kv.get(`faulty_record:${id}`);
+    if (!record) {
+      return c.json({ error: "Faulty asset record not found" }, 404);
+    }
+
+    await kv.del(`faulty_record:${id}`);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Delete faulty asset record error:", error);
+    return c.json({ error: "Failed to delete faulty asset record" }, 500);
   }
 });
 

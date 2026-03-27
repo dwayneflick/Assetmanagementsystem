@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Alert, AlertDescription } from "./ui/alert";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
-import { Database, Sparkles, Trash2 } from "lucide-react";
+import { Database, Sparkles, Trash2, Wrench } from "lucide-react";
 import { useState } from "react";
 
 export default function AdminDemoData() {
@@ -33,6 +33,35 @@ export default function AdminDemoData() {
     } catch (error) {
       console.error("Error seeding demo logs:", error);
       toast.error("An error occurred while seeding demo logs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const seedDemoMaintenance = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/seed-demo-maintenance`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.error || "Failed to seed demo maintenance logs");
+        return;
+      }
+
+      toast.success("✨ Demo maintenance logs created successfully!");
+    } catch (error) {
+      console.error("Error seeding demo maintenance logs:", error);
+      toast.error("An error occurred while seeding demo maintenance logs");
     } finally {
       setLoading(false);
     }
@@ -109,6 +138,38 @@ export default function AdminDemoData() {
               >
                 <Sparkles className="w-4 h-4 mr-2" />
                 {loading ? "Seeding..." : "Seed Demo Logs"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="w-5 h-5 text-purple-600" />
+              Seed Demo Maintenance
+            </CardTitle>
+            <CardDescription>
+              Create sample maintenance logs for testing
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4 text-sm space-y-2">
+                <p className="font-medium text-gray-900">This will create:</p>
+                <ul className="list-disc list-inside space-y-1 text-gray-700">
+                  <li>10 Maintenance Logs (various types)</li>
+                  <li>Sample data from different modules</li>
+                  <li>Realistic timestamps and details</li>
+                </ul>
+              </div>
+              <Button
+                onClick={seedDemoMaintenance}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+              >
+                <Wrench className="w-4 h-4 mr-2" />
+                {loading ? "Seeding..." : "Seed Demo Maintenance"}
               </Button>
             </div>
           </CardContent>

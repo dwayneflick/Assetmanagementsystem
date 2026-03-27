@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, useCallback } from "react";
+import { useState, useCallback, lazy, Suspense, startTransition, useEffect } from "react";
 import LoginPage from "./components/LoginPage";
 import Sidebar from "./components/Sidebar";
 import Notifications from "./components/Notifications";
@@ -10,17 +10,17 @@ import faviconImage from "figma:asset/c5292bdd917281e818e79b22fa402c2806ae9d2e.p
 // Lazy load all major components for code splitting and better performance
 const Dashboard = lazy(() => import("./components/Dashboard"));
 const AssetManagement = lazy(() => import("./components/AssetManagement"));
+const FaultyAssets = lazy(() => import("./components/FaultyAssets"));
 const IncidentReports = lazy(() => import("./components/IncidentReports"));
 const SoftwareManagement = lazy(() => import("./components/SoftwareManagement"));
 const ITIssueLogs = lazy(() => import("./components/ITIssueLogs"));
-const PurchaseOrders = lazy(() => import("./components/PurchaseOrders"));
 const Deregistration = lazy(() => import("./components/Deregistration"));
+const ITMaintenanceLog = lazy(() => import("./components/ITMaintenanceLog"));
 const KnowledgeBase = lazy(() => import("./components/KnowledgeBase"));
 const Reports = lazy(() => import("./components/Reports"));
-const AssetHandover = lazy(() => import("./components/AssetHandover"));
 const Settings = lazy(() => import("./components/Settings"));
 
-export type UserRole = "admin" | "agent";
+export type UserRole = "admin" | "agent" | "viewer";
 
 export interface User {
   id: string;
@@ -66,7 +66,9 @@ export default function App() {
   }, []);
 
   const handleNavigate = useCallback((page: string) => {
-    setCurrentPage(page);
+    startTransition(() => {
+      setCurrentPage(page);
+    });
     setSidebarOpen(false); // Close sidebar on mobile after navigation
   }, []);
 
@@ -87,28 +89,36 @@ export default function App() {
     );
   }
 
+  const VIEWER_ALLOWED_PAGES = ["dashboard", "assets", "faulty-assets"];
+
   const renderPage = () => {
-    switch (currentPage) {
+    // Restrict viewer role to only allowed pages
+    const effectivePage =
+      user.role === "viewer" && !VIEWER_ALLOWED_PAGES.includes(currentPage)
+        ? "dashboard"
+        : currentPage;
+
+    switch (effectivePage) {
       case "dashboard":
         return <Dashboard user={user} />;
       case "assets":
         return <AssetManagement user={user} />;
+      case "faulty-assets":
+        return <FaultyAssets user={user} />;
       case "incidents":
         return <IncidentReports user={user} />;
       case "software":
         return <SoftwareManagement user={user} />;
       case "it-issue-logs":
         return <ITIssueLogs user={user} />;
-      case "purchase-orders":
-        return <PurchaseOrders user={user} />;
       case "deregistration":
         return <Deregistration user={user} />;
+      case "it-maintenance-log":
+        return <ITMaintenanceLog user={user} />;
       case "knowledge-base":
         return <KnowledgeBase user={user} />;
       case "reports":
         return <Reports user={user} />;
-      case "asset-handover":
-        return <AssetHandover user={user} />;
       case "settings":
         return <Settings user={user} />;
       default:

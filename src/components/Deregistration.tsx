@@ -1,16 +1,36 @@
 import { useState, useEffect } from "react";
-import { User } from "../App";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { Card, CardContent } from "./ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { Badge } from "./ui/badge";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { Plus, Eye, Edit, Trash2 } from "lucide-react";
+import { Button } from "../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../components/ui/table";
+import { Card, CardContent } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
 import { toast } from "sonner@2.0.3";
-import { Plus, Eye, UserMinus } from "lucide-react";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { User } from "../App";
 
 interface DeregistrationProps {
   user: User;
@@ -24,6 +44,7 @@ interface Deregistration {
   deregisteredBy: string;
   status: string;
   reason?: string;
+  dateOfDeregistration?: string;
   createdAt: string;
 }
 
@@ -34,6 +55,7 @@ export default function Deregistration({ user }: DeregistrationProps) {
   const [deregistrations, setDeregistrations] = useState<Deregistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [selectedDereg, setSelectedDereg] = useState<Deregistration | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -45,6 +67,7 @@ export default function Deregistration({ user }: DeregistrationProps) {
     deregisteredBy: user.name,
     status: "Pending",
     reason: "",
+    dateOfDeregistration: "",
   };
 
   const [formData, setFormData] = useState<Partial<Deregistration>>(emptyDereg);
@@ -122,6 +145,68 @@ export default function Deregistration({ user }: DeregistrationProps) {
       console.error("Error creating deregistration:", error);
       toast.error("Failed to create deregistration");
     }
+  };
+
+  const handleEditDeregistration = async () => {
+    if (!validateForm()) return;
+    if (!selectedDereg) return;
+
+    try {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/deregistrations/${selectedDereg.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify(formData),
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to update deregistration");
+
+      toast.success("IT deregistration updated successfully");
+      setShowEditDialog(false);
+      setFormData(emptyDereg);
+      setSelectedDereg(null);
+      fetchDeregistrations();
+    } catch (error) {
+      console.error("Error updating deregistration:", error);
+      toast.error("Failed to update deregistration");
+    }
+  };
+
+  const handleDeleteDeregistration = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this deregistration? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/deregistrations/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to delete deregistration");
+
+      toast.success("IT deregistration deleted successfully");
+      fetchDeregistrations();
+    } catch (error) {
+      console.error("Error deleting deregistration:", error);
+      toast.error("Failed to delete deregistration");
+    }
+  };
+
+  const openEditDialog = (dereg: Deregistration) => {
+    setSelectedDereg(dereg);
+    setFormData(dereg);
+    setShowEditDialog(true);
   };
 
   const openViewDialog = (dereg: Deregistration) => {
@@ -279,12 +364,130 @@ export default function Deregistration({ user }: DeregistrationProps) {
                   placeholder="e.g., Employee exit, asset disposal"
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dateOfDeregistration">Date of Deregistration</Label>
+                <Input
+                  id="dateOfDeregistration"
+                  type="date"
+                  value={formData.dateOfDeregistration || ""}
+                  onChange={(e) => setFormData({ ...formData, dateOfDeregistration: e.target.value })}
+                />
+              </div>
             </div>
             <div className="flex justify-end space-x-2 p-4">
               <Button variant="outline" onClick={() => setShowAddDialog(false)}>
                 Cancel
               </Button>
               <Button onClick={handleAddDeregistration}>Create Deregistration</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {/* Edit Dialog - Opened programmatically when edit button is clicked */}
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent className="max-w-2xl mx-3 sm:mx-4 w-[calc(100%-1.5rem)] sm:w-auto max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-base sm:text-lg md:text-xl">Edit IT Deregistration</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Update asset deregistration details
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 p-4">
+              <div className="space-y-2">
+                <Label htmlFor="assetType">Type of Asset *</Label>
+                <Select
+                  value={formData.assetType || ""}
+                  onValueChange={(value) => setFormData({ ...formData, assetType: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ASSET_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="assetName">Name of Asset *</Label>
+                <Input
+                  id="assetName"
+                  value={formData.assetName || ""}
+                  onChange={(e) => setFormData({ ...formData, assetName: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="userName">User Name *</Label>
+                <Input
+                  id="userName"
+                  value={formData.userName || ""}
+                  onChange={(e) => setFormData({ ...formData, userName: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="deregisteredBy">Deregistered By *</Label>
+                <Input
+                  id="deregisteredBy"
+                  value={formData.deregisteredBy || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, deregisteredBy: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="status">Status *</Label>
+                <Select
+                  value={formData.status || ""}
+                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEREG_STATUSES.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reason">Reason for Deregistration</Label>
+                <Input
+                  id="reason"
+                  value={formData.reason || ""}
+                  onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                  placeholder="e.g., Employee exit, asset disposal"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dateOfDeregistration">Date of Deregistration</Label>
+                <Input
+                  id="dateOfDeregistration"
+                  type="date"
+                  value={formData.dateOfDeregistration || ""}
+                  onChange={(e) => setFormData({ ...formData, dateOfDeregistration: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 p-4">
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditDeregistration}>Update Deregistration</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -315,7 +518,7 @@ export default function Deregistration({ user }: DeregistrationProps) {
                   <TableHead>User Name</TableHead>
                   <TableHead>Deregistered By</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
+                  <TableHead>Date of Deregistration</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -344,16 +547,37 @@ export default function Deregistration({ user }: DeregistrationProps) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {new Date(dereg.createdAt).toLocaleDateString()}
+                        {dereg.dateOfDeregistration
+                          ? new Date(dereg.dateOfDeregistration).toLocaleDateString()
+                          : "Not set"}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => openViewDialog(dereg)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openViewDialog(dereg)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openEditDialog(dereg)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          {(user.role === "admin" || user.name === "Admin" || user.name === "Kingsley") && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteDeregistration(dereg.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -369,6 +593,9 @@ export default function Deregistration({ user }: DeregistrationProps) {
         <DialogContent className="max-w-2xl mx-3 sm:mx-4 w-[calc(100%-1.5rem)] sm:w-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base sm:text-lg md:text-xl">Deregistration Details</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              View complete deregistration information
+            </DialogDescription>
           </DialogHeader>
           {selectedDereg && (
             <div className="grid grid-cols-2 gap-4 p-4">
@@ -400,6 +627,14 @@ export default function Deregistration({ user }: DeregistrationProps) {
                   {selectedDereg.status}
                 </Badge>
               </div>
+              {selectedDereg.dateOfDeregistration && (
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Date of Deregistration</p>
+                  <p className="text-sm">
+                    {new Date(selectedDereg.dateOfDeregistration).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-sm text-gray-500 mb-1">Date Created</p>
                 <p className="text-sm">

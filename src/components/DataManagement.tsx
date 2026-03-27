@@ -22,8 +22,6 @@ import {
   Package,
   FileText,
   AlertTriangle,
-  ShoppingCart,
-  UserCheck,
   UserMinus,
   Code,
 } from "lucide-react";
@@ -206,89 +204,6 @@ export default function DataManagement() {
     return csv;
   };
 
-  // Generate sample CSV for Purchase Orders
-  const generatePurchaseOrderSampleCSV = () => {
-    const headers = [
-      "Item Name",
-      "Quantity",
-      "Unit Price (₦)",
-      "Total Amount (₦)",
-      "Vendor",
-      "Requested By",
-      "Department",
-      "Priority",
-      "Justification",
-    ];
-
-    const sampleData = [
-      [
-        "Dell Monitor 27 inch",
-        "10",
-        "85000",
-        "850000",
-        "Dell Technologies",
-        "John Doe",
-        "IT",
-        "Medium",
-        "Required for new workstations",
-      ],
-      [
-        "Wireless Mouse",
-        "20",
-        "3500",
-        "70000",
-        "Logitech",
-        "Jane Smith",
-        "Administration",
-        "Low",
-        "Replacement for old mice",
-      ],
-    ];
-
-    const csv = [headers.join(","), ...sampleData.map((row) => row.join(","))].join("\n");
-    return csv;
-  };
-
-  // Generate sample CSV for Asset Handover
-  const generateAssetHandoverSampleCSV = () => {
-    const headers = [
-      "Asset Name",
-      "Serial Number",
-      "Product Type",
-      "Handed To",
-      "Department",
-      "Handover Date",
-      "Condition",
-      "Notes",
-    ];
-
-    const sampleData = [
-      [
-        "Dell Latitude 5420",
-        "SVC123456",
-        "Laptop",
-        "John Doe",
-        "IT",
-        "2024-12-01",
-        "Excellent",
-        "All accessories included",
-      ],
-      [
-        "iPhone 14 Pro",
-        "IMEI987654321",
-        "Mobile Device",
-        "Jane Smith",
-        "Sales",
-        "2024-12-05",
-        "Good",
-        "Charger and case included",
-      ],
-    ];
-
-    const csv = [headers.join(","), ...sampleData.map((row) => row.join(","))].join("\n");
-    return csv;
-  };
-
   // Generate sample CSV for IT Deregistration
   const generateDeregistrationSampleCSV = () => {
     const headers = [
@@ -351,14 +266,6 @@ export default function DataManagement() {
       case "incidents":
         csv = generateIncidentSampleCSV();
         filename = "incident_sample_template.csv";
-        break;
-      case "purchase-orders":
-        csv = generatePurchaseOrderSampleCSV();
-        filename = "purchase_order_sample_template.csv";
-        break;
-      case "handover":
-        csv = generateAssetHandoverSampleCSV();
-        filename = "asset_handover_sample_template.csv";
         break;
       case "deregistration":
         csv = generateDeregistrationSampleCSV();
@@ -465,20 +372,6 @@ export default function DataManagement() {
       description: "Upload and manage incident reports in bulk",
       icon: AlertTriangle,
       color: "red",
-    },
-    {
-      id: "purchase-orders",
-      name: "Purchase Orders",
-      description: "Upload and manage purchase orders in bulk",
-      icon: ShoppingCart,
-      color: "green",
-    },
-    {
-      id: "handover",
-      name: "Asset Handover",
-      description: "Upload and manage asset handovers in bulk",
-      icon: UserCheck,
-      color: "teal",
     },
     {
       id: "deregistration",

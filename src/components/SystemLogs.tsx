@@ -120,7 +120,11 @@ export default function SystemLogs() {
 
       if (auditResponse.ok) {
         const auditData = await auditResponse.json();
+        console.log("Audit logs received:", auditData);
+        console.log("Number of audit logs:", (auditData.logs || []).length);
         setAuditLogs(auditData.logs || []);
+      } else {
+        console.error("Failed to fetch audit logs:", auditResponse.status);
       }
     } catch (error) {
       console.error("Error fetching logs:", error);
@@ -253,6 +257,7 @@ export default function SystemLogs() {
     if (!log) return false;
     
     const matchesSearch =
+      !auditSearchQuery || // If search is empty, match all
       (log.user && typeof log.user === 'string' && log.user.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
       (log.action && log.action.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
       (log.details && log.details.toLowerCase().includes(auditSearchQuery.toLowerCase())) ||
@@ -262,8 +267,27 @@ export default function SystemLogs() {
     const matchesModule = auditModuleFilter === "all" || log.module === auditModuleFilter;
     const matchesStatus = auditStatusFilter === "all" || log.status === auditStatusFilter;
 
-    return matchesSearch && matchesAction && matchesModule && matchesStatus;
+    const result = matchesSearch && matchesAction && matchesModule && matchesStatus;
+    
+    // Debug logging
+    if (auditLogs.length > 0 && !result) {
+      console.log("Log filtered out:", {
+        log,
+        matchesSearch,
+        matchesAction,
+        matchesModule,
+        matchesStatus,
+        auditSearchQuery,
+        auditActionFilter,
+        auditModuleFilter,
+        auditStatusFilter
+      });
+    }
+
+    return result;
   });
+
+  console.log("Audit logs:", auditLogs.length, "Filtered:", filteredAuditLogs.length);
 
   // Get unique modules and actions for filters
   const errorModules = Array.from(new Set((errorLogs || []).filter(log => log && log.module).map((log) => log.module)));
@@ -633,14 +657,36 @@ export default function SystemLogs() {
                 <div className="text-center py-12 text-gray-500">
                   Loading audit logs...
                 </div>
-              ) : filteredAuditLogs.length === 0 ? (
+              ) : (auditLogs || []).length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
-                  {auditSearchQuery ||
-                  auditActionFilter !== "all" ||
-                  auditModuleFilter !== "all" ||
-                  auditStatusFilter !== "all"
-                    ? "No audit logs found matching your filters"
-                    : "No audit logs found"}
+                  No audit logs found in database
+                </div>
+              ) : filteredAuditLogs.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 mb-4">
+                    No audit logs found matching your filters
+                  </p>
+                  <div className="text-sm text-gray-400 space-y-1">
+                    <p>Total logs in database: {(auditLogs || []).length}</p>
+                    <p>Filtered out: {(auditLogs || []).length - filteredAuditLogs.length}</p>
+                    {auditSearchQuery && <p>Search: "{auditSearchQuery}"</p>}
+                    {auditActionFilter !== "all" && <p>Action filter: {auditActionFilter}</p>}
+                    {auditModuleFilter !== "all" && <p>Module filter: {auditModuleFilter}</p>}
+                    {auditStatusFilter !== "all" && <p>Status filter: {auditStatusFilter}</p>}
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setAuditSearchQuery("");
+                      setAuditActionFilter("all");
+                      setAuditModuleFilter("all");
+                      setAuditStatusFilter("all");
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                  >
+                    Clear All Filters
+                  </Button>
                 </div>
               ) : (
                 <div className="overflow-x-auto">

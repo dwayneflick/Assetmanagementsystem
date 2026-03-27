@@ -5,8 +5,131 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
-import { FileText, Download, TrendingUp, DollarSign, Package, AlertCircle } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
+import { Download, TrendingUp, DollarSign, Package, AlertCircle } from "lucide-react";
+// recharts fully removed — CssBarChart replaces all charts to eliminate SVG duplicate-key warnings
+
+// ─── Shared CSS chart helpers ─────────────────────────────────────────────────
+const PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+
+interface CssBarEntry { [key: string]: any; }
+
+function CssBarChart({
+  data, valueKey, labelKey, colorFn, height = 260, formatValue,
+}: {
+  data: CssBarEntry[];
+  valueKey: string;
+  labelKey: string;
+  colorFn?: (entry: CssBarEntry, index: number) => string;
+  height?: number;
+  formatValue?: (v: number) => string;
+}) {
+  const max = Math.max(...data.map((d) => Number(d[valueKey]) || 0), 1);
+  if (data.length === 0) {
+    return (
+      <div style={{ height }} className="flex items-center justify-center text-sm text-gray-400">
+        No data
+      </div>
+    );
+  }
+  return (
+    <div style={{ height }} className="w-full flex flex-col">
+      <div className="flex items-end gap-2 flex-1 px-2">
+        {data.map((entry, i) => {
+          const val = Number(entry[valueKey]) || 0;
+          const pct = (val / max) * 100;
+          const color = colorFn ? colorFn(entry, i) : "#3b82f6";
+          return (
+            <div
+              key={`bar-${i}-${entry[labelKey]}`}
+              className="flex flex-col items-center flex-1 h-full justify-end"
+              title={`${entry[labelKey]}: ${formatValue ? formatValue(val) : val}`}
+            >
+              <span className="text-xs font-semibold text-gray-600 mb-1">
+                {formatValue ? formatValue(val) : val}
+              </span>
+              <div
+                className="w-full rounded-t transition-all duration-500"
+                style={{ height: `${Math.max(pct, 2)}%`, backgroundColor: color, minHeight: 4 }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-2 px-2 mt-2" style={{ height: 36 }}>
+        {data.map((entry, i) => (
+          <div key={`lbl-${i}`} className="flex-1 flex items-start justify-center">
+            <span
+              className="text-xs text-gray-500 text-center leading-tight"
+              style={{ wordBreak: "break-word", maxWidth: "100%" }}
+            >
+              {entry[labelKey]}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Mini line-trend chart (CSS only)
+function CssTrendChart({ data, valueKey, labelKey, height = 200 }: {
+  data: CssBarEntry[]; valueKey: string; labelKey: string; height?: number;
+}) {
+  const vals = data.map((d) => Number(d[valueKey]) || 0);
+  const max = Math.max(...vals, 1);
+  const chartH = height - 36;
+
+  const points = vals.map((v, i) => ({
+    x: data.length === 1 ? 50 : (i / (data.length - 1)) * 100,
+    y: 100 - (v / max) * 100,
+    v,
+    label: data[i][labelKey],
+  }));
+
+  const polyline = points.map((p) => `${p.x},${p.y}`).join(" ");
+
+  return (
+    <div style={{ height }} className="w-full flex flex-col">
+      <div style={{ height: chartH }} className="relative w-full px-2">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+          {/* grid lines */}
+          {[0, 25, 50, 75, 100].map((y) => (
+            <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="#e5e7eb" strokeWidth="0.5" />
+          ))}
+          {/* area fill */}
+          <polyline
+            points={`0,100 ${polyline} 100,100`}
+            fill="#3b82f620"
+            stroke="none"
+          />
+          {/* line */}
+          <polyline
+            points={polyline}
+            fill="none"
+            stroke="#3b82f6"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+          {/* dots */}
+          {points.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r="2" fill="#3b82f6" vectorEffect="non-scaling-stroke" />
+          ))}
+        </svg>
+      </div>
+      <div className="flex gap-1 px-2 mt-1" style={{ height: 30 }}>
+        {data.map((entry, i) => (
+          <div key={i} className="flex-1 flex items-start justify-center">
+            <span className="text-xs text-gray-500 text-center leading-tight">
+              {entry[labelKey]}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 
 interface ReportsProps {
   user: User;
@@ -46,28 +169,16 @@ export default function Reports({ user }: ReportsProps) {
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState("overview");
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
-      const [assetsResponse, softwareResponse, incidentsResponse] = await Promise.all([
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/assets`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/software`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/incidents`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }),
+      const [assetsRes, softwareRes, incidentsRes] = await Promise.all([
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/assets`, { headers: { Authorization: `Bearer ${publicAnonKey}` } }),
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/software`, { headers: { Authorization: `Bearer ${publicAnonKey}` } }),
+        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/incidents`, { headers: { Authorization: `Bearer ${publicAnonKey}` } }),
       ]);
-
-      const assetsData = await assetsResponse.json();
-      const softwareData = await softwareResponse.json();
-      const incidentsData = await incidentsResponse.json();
-
+      const [assetsData, softwareData, incidentsData] = await Promise.all([assetsRes.json(), softwareRes.json(), incidentsRes.json()]);
       setAssets(assetsData.assets || []);
       setSoftware(softwareData.software || []);
       setIncidents(incidentsData.incidents || []);
@@ -79,119 +190,53 @@ export default function Reports({ user }: ReportsProps) {
     }
   };
 
-  // Asset Analytics
-  const assetsByDepartment = assets.reduce((acc, asset) => {
-    const dept = asset.department || "Unassigned";
-    acc[dept] = (acc[dept] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // ── Derived data ──────────────────────────────────────────────────────────
 
-  const departmentData = Object.entries(assetsByDepartment).map(([name, count]) => ({
-    name,
-    count,
-  }));
-
-  const assetsByType = assets.reduce((acc, asset) => {
-    acc[asset.productType] = (acc[asset.productType] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const typeData = Object.entries(assetsByType).map(([name, count]) => ({
-    name,
-    count,
-  }));
-
-  const assetsByState = assets.reduce((acc, asset) => {
-    acc[asset.assetState] = (acc[asset.assetState] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const stateData = Object.entries(assetsByState).map(([name, value]) => ({
-    name,
-    value,
-  }));
-
-  // Cost Analytics
-  const totalAssetCost = assets.reduce((sum, asset) => sum + (asset.cost || 0), 0);
+  const totalAssetCost = assets.reduce((sum, a) => sum + (a.cost || 0), 0);
   const avgAssetCost = assets.length > 0 ? totalAssetCost / assets.length : 0;
 
-  const costByDepartment = assets.reduce((acc, asset) => {
-    const dept = asset.department || "Unassigned";
-    acc[dept] = (acc[dept] || 0) + (asset.cost || 0);
-    return acc;
-  }, {} as Record<string, number>);
+  const departmentData = Object.entries(
+    assets.reduce((acc, a) => { const d = a.department || "Unassigned"; acc[d] = (acc[d] || 0) + 1; return acc; }, {} as Record<string, number>)
+  ).map(([name, count]) => ({ name, count }));
 
-  const costData = Object.entries(costByDepartment).map(([name, cost]) => ({
-    name,
-    cost,
-  }));
+  const typeData = Object.entries(
+    assets.reduce((acc, a) => { acc[a.productType] = (acc[a.productType] || 0) + 1; return acc; }, {} as Record<string, number>)
+  ).map(([name, count]) => ({ name, count }));
 
-  // Incident Analytics
-  const incidentsByType = incidents.reduce((acc, incident) => {
-    acc[incident.incidentType] = (acc[incident.incidentType] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const stateData = Object.entries(
+    assets.reduce((acc, a) => { acc[a.assetState] = (acc[a.assetState] || 0) + 1; return acc; }, {} as Record<string, number>)
+  ).map(([name, value]) => ({ name, value }));
 
-  const incidentTypeData = Object.entries(incidentsByType).map(([name, count]) => ({
-    name,
-    count,
-  }));
+  const costData = Object.entries(
+    assets.reduce((acc, a) => { const d = a.department || "Unassigned"; acc[d] = (acc[d] || 0) + (a.cost || 0); return acc; }, {} as Record<string, number>)
+  ).map(([name, cost]) => ({ name, cost }));
 
-  const incidentsBySeverity = incidents.reduce((acc, incident) => {
-    acc[incident.impactSeverity] = (acc[incident.impactSeverity] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const incidentTypeData = Object.entries(
+    incidents.reduce((acc, i) => { acc[i.incidentType] = (acc[i.incidentType] || 0) + 1; return acc; }, {} as Record<string, number>)
+  ).map(([name, count]) => ({ name, count }));
 
-  const severityData = Object.entries(incidentsBySeverity).map(([name, value]) => ({
-    name,
-    value,
-  }));
+  const severityData = Object.entries(
+    incidents.reduce((acc, i) => { acc[i.impactSeverity] = (acc[i.impactSeverity] || 0) + 1; return acc; }, {} as Record<string, number>)
+  ).map(([name, value]) => ({ name, value }));
 
-  // Monthly asset creation trend (last 6 months)
-  const getLast6Months = () => {
-    const months = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      months.push({
-        month: date.toLocaleString("default", { month: "short" }),
-        year: date.getFullYear(),
-        key: `${date.getFullYear()}-${date.getMonth()}`,
-      });
-    }
-    return months;
-  };
-
-  const last6Months = getLast6Months();
-  const assetTrendData = last6Months.map((month) => {
-    const count = assets.filter((asset) => {
-      const assetDate = new Date(asset.createdAt);
-      return (
-        `${assetDate.getFullYear()}-${assetDate.getMonth()}` === month.key
-      );
-    }).length;
+  // Last 6 months trend
+  const assetTrendData = Array.from({ length: 6 }, (_, i) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - i));
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
     return {
-      month: month.month,
-      count,
+      month: date.toLocaleString("default", { month: "short" }),
+      count: assets.filter((a) => {
+        const d = new Date(a.createdAt);
+        return `${d.getFullYear()}-${d.getMonth()}` === key;
+      }).length,
     };
   });
 
-  const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
-
   const exportToCSV = (data: any[], filename: string) => {
-    if (data.length === 0) {
-      toast.error("No data to export");
-      return;
-    }
-
+    if (data.length === 0) { toast.error("No data to export"); return; }
     const headers = Object.keys(data[0]);
-    const csvContent = [
-      headers.join(","),
-      ...data.map((row) =>
-        headers.map((header) => JSON.stringify(row[header] || "")).join(",")
-      ),
-    ].join("\n");
-
+    const csvContent = [headers.join(","), ...data.map((row) => headers.map((h) => JSON.stringify(row[h] || "")).join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -252,85 +297,38 @@ export default function Reports({ user }: ReportsProps) {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Assets</p>
-                <p className="text-3xl mb-2">{assets.length}</p>
-                <p className="text-xs text-gray-500">Across all departments</p>
+        {[
+          { label: "Total Assets", value: assets.length, sub: "Across all departments", Icon: Package, bg: "bg-blue-500" },
+          { label: "Total Cost", value: `₦${(totalAssetCost / 1000000).toFixed(1)}M`, sub: "Asset investments", Icon: DollarSign, bg: "bg-green-500" },
+          { label: "Total Incidents", value: incidents.length, sub: "Reported issues", Icon: AlertCircle, bg: "bg-red-500" },
+          { label: "Avg Asset Cost", value: `₦${(avgAssetCost / 1000).toFixed(0)}K`, sub: "Per asset", Icon: TrendingUp, bg: "bg-purple-500" },
+        ].map(({ label, value, sub, Icon, bg }) => (
+          <Card key={label}>
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">{label}</p>
+                  <p className="text-3xl mb-2">{value}</p>
+                  <p className="text-xs text-gray-500">{sub}</p>
+                </div>
+                <div className={`${bg} p-3 rounded-lg`}>
+                  <Icon className="w-6 h-6 text-white" />
+                </div>
               </div>
-              <div className="bg-blue-500 p-3 rounded-lg">
-                <Package className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Cost</p>
-                <p className="text-3xl mb-2">₦{(totalAssetCost / 1000000).toFixed(1)}M</p>
-                <p className="text-xs text-gray-500">Asset investments</p>
-              </div>
-              <div className="bg-green-500 p-3 rounded-lg">
-                <DollarSign className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Incidents</p>
-                <p className="text-3xl mb-2">{incidents.length}</p>
-                <p className="text-xs text-gray-500">Reported issues</p>
-              </div>
-              <div className="bg-red-500 p-3 rounded-lg">
-                <AlertCircle className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Avg Asset Cost</p>
-                <p className="text-3xl mb-2">₦{(avgAssetCost / 1000).toFixed(0)}K</p>
-                <p className="text-xs text-gray-500">Per asset</p>
-              </div>
-              <div className="bg-purple-500 p-3 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Overview Report */}
+      {/* ── Overview ─────────────────────────────────────────────────────────── */}
       {reportType === "overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Asset Acquisition Trend (Last 6 Months)</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={assetTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} name="Assets" />
-                </LineChart>
-              </ResponsiveContainer>
+            <CardContent className="p-4">
+              <CssTrendChart data={assetTrendData} valueKey="count" labelKey="month" height={280} />
             </CardContent>
           </Card>
 
@@ -338,48 +336,34 @@ export default function Reports({ user }: ReportsProps) {
             <CardHeader>
               <CardTitle>Asset Status Distribution</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={stateData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {stateData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={stateData}
+                valueKey="value"
+                labelKey="name"
+                colorFn={(_, i) => PALETTE[i % PALETTE.length]}
+                height={280}
+              />
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Assets Report */}
+      {/* ── Assets Report ────────────────────────────────────────────────────── */}
       {reportType === "assets" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Assets by Department</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={departmentData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#3b82f6" />
-                </BarChart>
-              </ResponsiveContainer>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={departmentData}
+                valueKey="count"
+                labelKey="name"
+                colorFn={() => "#3b82f6"}
+                height={280}
+              />
             </CardContent>
           </Card>
 
@@ -387,71 +371,53 @@ export default function Reports({ user }: ReportsProps) {
             <CardHeader>
               <CardTitle>Assets by Type</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={typeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, count }) => `${name}: ${count}`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="count"
-                  >
-                    {typeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={typeData}
+                valueKey="count"
+                labelKey="name"
+                colorFn={(_, i) => PALETTE[i % PALETTE.length]}
+                height={280}
+              />
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* Financial Report */}
+      {/* ── Financial Report ──────────────────────────────────────────────────── */}
       {reportType === "financial" && (
-        <div className="grid grid-cols-1 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Cost by Department (₦)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={costData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip formatter={(value: number) => `₦${value.toLocaleString()}`} />
-                  <Legend />
-                  <Bar dataKey="cost" fill="#10b981" name="Total Cost" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Cost by Department (₦)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <CssBarChart
+              data={costData}
+              valueKey="cost"
+              labelKey="name"
+              colorFn={() => "#10b981"}
+              height={360}
+              formatValue={(v) => `₦${(v / 1000).toFixed(0)}K`}
+            />
+          </CardContent>
+        </Card>
       )}
 
-      {/* Incidents Report */}
+      {/* ── Incidents Report ──────────────────────────────────────────────────── */}
       {reportType === "incidents" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
               <CardTitle>Incidents by Type</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={incidentTypeData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#ef4444" />
-                </BarChart>
-              </ResponsiveContainer>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={incidentTypeData}
+                valueKey="count"
+                labelKey="name"
+                colorFn={() => "#ef4444"}
+                height={280}
+              />
             </CardContent>
           </Card>
 
@@ -459,26 +425,14 @@ export default function Reports({ user }: ReportsProps) {
             <CardHeader>
               <CardTitle>Incidents by Severity</CardTitle>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={severityData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {severityData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={severityData}
+                valueKey="value"
+                labelKey="name"
+                colorFn={(_, i) => PALETTE[i % PALETTE.length]}
+                height={280}
+              />
             </CardContent>
           </Card>
         </div>

@@ -12,10 +12,12 @@ import {
   FileText,
   LogOut,
   Settings,
-  UserCheck,
   X,
   FileWarning,
   Laptop,
+  Wrench,
+  ExternalLink,
+  ShieldAlert,
 } from "lucide-react";
 import andersenLogo from "figma:asset/c5292bdd917281e818e79b22fa402c2806ae9d2e.png";
 
@@ -28,22 +30,30 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-// Memoize the menu items array to prevent re-creation on every render
-const menuItems = [
+// Full menu items for admin/agent
+const allMenuItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "assets", label: "Asset Management", icon: Package },
+  { id: "faulty-assets", label: "Faulty Assets", icon: ShieldAlert },
   { id: "incidents", label: "Incident Reports", icon: FileWarning },
   { id: "software", label: "Software Management", icon: Laptop },
-  { id: "purchase-orders", label: "Purchase Orders", icon: ShoppingCart },
-  { id: "asset-handover", label: "Asset Handover", icon: UserCheck },
+  { id: "expense-management", label: "Expense Management App", icon: ShoppingCart, externalUrl: "http://ec2-3-95-165-188.compute-1.amazonaws.com/ems/#/AdvancesA" },
   { id: "deregistration", label: "IT Deregistration", icon: UserMinus },
+  { id: "it-maintenance-log", label: "IT Maintenance Log", icon: Wrench },
   { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen },
   { id: "reports", label: "Reports", icon: FileText },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
+// Restricted menu for viewer role (Finance)
+const viewerMenuItems = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "assets", label: "Asset Management", icon: Package },
+  { id: "faulty-assets", label: "Faulty Assets", icon: ShieldAlert },
+];
+
 export function Sidebar({ user, currentPage, onNavigate, onLogout, isOpen, onClose }: SidebarProps) {
-  const allMenuItems = menuItems;
+  const menuItems = user.role === "viewer" ? viewerMenuItems : allMenuItems;
 
   return (
     <>
@@ -84,17 +94,35 @@ export function Sidebar({ user, currentPage, onNavigate, onLogout, isOpen, onClo
           <div className="mt-4 p-3 bg-gray-800 rounded-lg">
             <p className="text-sm text-gray-300 truncate">{user.name}</p>
             <p className="text-xs text-gray-400 capitalize mt-1">
-              {user.role}
+              {user.role === "viewer" ? "Finance (View Only)" : user.role}
             </p>
           </div>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {allMenuItems.map((item) => {
+          {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.id;
             
+            if (item.externalUrl) {
+              return (
+                <a
+                  key={item.id}
+                  href={item.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all hover:bg-gray-700`}
+                >
+                  <div className="w-8 h-8 bg-[#1a1f3a] rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <span className="text-sm truncate flex-1">{item.label}</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                </a>
+              );
+            }
+
             return (
               <button
                 key={item.id}

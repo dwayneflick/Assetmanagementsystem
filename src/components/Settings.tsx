@@ -420,6 +420,11 @@ export default function Settings({ user }: SettingsProps) {
       (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  // Deduplicate by id to prevent duplicate key warnings
+  const uniqueFilteredUsers = Array.from(
+    new Map(filteredUsers.map((u) => [u.id, u])).values()
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -862,7 +867,7 @@ export default function Settings({ user }: SettingsProps) {
                     <div className="text-center py-12 text-gray-500">
                       Loading users...
                     </div>
-                  ) : filteredUsers.length === 0 ? (
+                  ) : uniqueFilteredUsers.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       {searchQuery ? "No users found matching your search" : "No users found"}
                     </div>
@@ -879,7 +884,7 @@ export default function Settings({ user }: SettingsProps) {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredUsers.map((u) => (
+                          {uniqueFilteredUsers.map((u) => (
                             <TableRow key={u.id}>
                               <TableCell>
                                 <div className="flex flex-col">
