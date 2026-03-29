@@ -142,6 +142,7 @@ interface Asset {
   assetState: string;
   cost: number;
   department: string;
+  unit?: string;
   createdAt: string;
   warrantyExpiry?: string;
 }
@@ -209,6 +210,14 @@ export default function Reports({ user }: ReportsProps) {
 
   const costData = Object.entries(
     assets.reduce((acc, a) => { const d = a.department || "Unassigned"; acc[d] = (acc[d] || 0) + (a.cost || 0); return acc; }, {} as Record<string, number>)
+  ).map(([name, cost]) => ({ name, cost }));
+
+  const unitData = Object.entries(
+    assets.reduce((acc, a) => { const u = a.unit || "Unassigned"; acc[u] = (acc[u] || 0) + 1; return acc; }, {} as Record<string, number>)
+  ).map(([name, count]) => ({ name, count }));
+
+  const costByUnitData = Object.entries(
+    assets.reduce((acc, a) => { const u = a.unit || "Unassigned"; acc[u] = (acc[u] || 0) + (a.cost || 0); return acc; }, {} as Record<string, number>)
   ).map(([name, cost]) => ({ name, cost }));
 
   const incidentTypeData = Object.entries(
@@ -369,6 +378,21 @@ export default function Reports({ user }: ReportsProps) {
 
           <Card>
             <CardHeader>
+              <CardTitle>Assets by Unit</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={unitData}
+                valueKey="count"
+                labelKey="name"
+                colorFn={(_, i) => PALETTE[i % PALETTE.length]}
+                height={280}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Assets by Type</CardTitle>
             </CardHeader>
             <CardContent className="p-4">
@@ -386,21 +410,39 @@ export default function Reports({ user }: ReportsProps) {
 
       {/* ── Financial Report ──────────────────────────────────────────────────── */}
       {reportType === "financial" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Cost by Department (₦)</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            <CssBarChart
-              data={costData}
-              valueKey="cost"
-              labelKey="name"
-              colorFn={() => "#10b981"}
-              height={360}
-              formatValue={(v) => `₦${(v / 1000).toFixed(0)}K`}
-            />
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Cost by Department (₦)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={costData}
+                valueKey="cost"
+                labelKey="name"
+                colorFn={() => "#10b981"}
+                height={360}
+                formatValue={(v) => `₦${(v / 1000).toFixed(0)}K`}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Cost by Unit (₦)</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              <CssBarChart
+                data={costByUnitData}
+                valueKey="cost"
+                labelKey="name"
+                colorFn={(_, i) => PALETTE[i % PALETTE.length]}
+                height={360}
+                formatValue={(v) => `₦${(v / 1000).toFixed(0)}K`}
+              />
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* ── Incidents Report ──────────────────────────────────────────────────── */}

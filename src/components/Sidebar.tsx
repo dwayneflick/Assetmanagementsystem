@@ -18,6 +18,7 @@ import {
   Wrench,
   ExternalLink,
   ShieldAlert,
+  Shield,
 } from "lucide-react";
 import andersenLogo from "figma:asset/c5292bdd917281e818e79b22fa402c2806ae9d2e.png";
 
@@ -42,6 +43,7 @@ const allMenuItems = [
   { id: "it-maintenance-log", label: "IT Maintenance Log", icon: Wrench },
   { id: "knowledge-base", label: "Knowledge Base", icon: BookOpen },
   { id: "reports", label: "Reports", icon: FileText },
+  { id: "audit-log", label: "Audit Log", icon: Shield },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 

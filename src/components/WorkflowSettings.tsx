@@ -1,3 +1,4 @@
+import { cachedFetch, invalidateCache } from "../utils/cache";
 import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -76,20 +77,11 @@ export default function WorkflowSettings() {
   const fetchWorkflows = async () => {
     setLoading(true);
     try {
-      const response = await fetch(
+      const data = await cachedFetch<{ workflows: any[] }>(
         `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/workflows`,
-        {
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        30_000
       );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch workflows");
-      }
-
-      const data = await response.json();
       setWorkflows(data.workflows || []);
     } catch (error) {
       console.error("Error fetching workflows:", error);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { User } from "../App";
 import { Button } from "./ui/button";
+import { cachedFetch, invalidateCache } from "../utils/cache";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -85,13 +86,11 @@ export default function SoftwareManagement({ user }: SoftwareManagementProps) {
 
   const fetchSoftware = async () => {
     try {
-      const response = await fetch(
+      const data = await cachedFetch<{ software: any[] }>(
         `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/software`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        30_000
       );
-      const data = await response.json();
       setSoftware(data.software || []);
     } catch (error) {
       console.error("Error fetching software:", error);
@@ -120,6 +119,7 @@ export default function SoftwareManagement({ user }: SoftwareManagementProps) {
       if (!response.ok) throw new Error("Failed to create software");
 
       toast.success("Software created successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/software`);
       setShowAddDialog(false);
       setFormData(emptySoftware);
       fetchSoftware();
@@ -131,7 +131,6 @@ export default function SoftwareManagement({ user }: SoftwareManagementProps) {
 
   const handleUpdateSoftware = async () => {
     if (!selectedSoftware) return;
-
     if (!validateForm()) return;
 
     try {
@@ -150,6 +149,7 @@ export default function SoftwareManagement({ user }: SoftwareManagementProps) {
       if (!response.ok) throw new Error("Failed to update software");
 
       toast.success("Software updated successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/software`);
       setShowEditDialog(false);
       setSelectedSoftware(null);
       setFormData(emptySoftware);
@@ -180,6 +180,7 @@ export default function SoftwareManagement({ user }: SoftwareManagementProps) {
       if (!response.ok) throw new Error("Failed to delete software");
 
       toast.success("Software deleted successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/software`);
       fetchSoftware();
     } catch (error) {
       console.error("Error deleting software:", error);

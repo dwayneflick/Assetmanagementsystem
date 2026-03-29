@@ -1,3 +1,4 @@
+import { cachedFetch, invalidateCache } from "../utils/cache";
 import { useState, useEffect } from "react";
 import { Plus, Eye, Edit, Trash2 } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -107,13 +108,11 @@ export default function ITMaintenanceLog({ user }: ITMaintenanceLogProps) {
 
   const fetchLogs = async () => {
     try {
-      const response = await fetch(
+      const data = await cachedFetch<{ logs: any[] }>(
         `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/maintenance-logs`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        30_000
       );
-      const data = await response.json();
       setLogs(data.logs || []);
     } catch (error) {
       console.error("Error fetching maintenance logs:", error);
@@ -142,6 +141,7 @@ export default function ITMaintenanceLog({ user }: ITMaintenanceLogProps) {
       if (!response.ok) throw new Error("Failed to create maintenance log");
 
       toast.success("Maintenance log created successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/maintenance-logs`);
       setShowAddDialog(false);
       setFormData(emptyLog);
       fetchLogs();
@@ -171,6 +171,7 @@ export default function ITMaintenanceLog({ user }: ITMaintenanceLogProps) {
       if (!response.ok) throw new Error("Failed to update maintenance log");
 
       toast.success("Maintenance log updated successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/maintenance-logs`);
       setShowEditDialog(false);
       setFormData(emptyLog);
       setSelectedLog(null);
@@ -204,6 +205,7 @@ export default function ITMaintenanceLog({ user }: ITMaintenanceLogProps) {
       if (!response.ok) throw new Error("Failed to delete maintenance log");
 
       toast.success("Maintenance log deleted successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/maintenance-logs`);
       fetchLogs();
     } catch (error) {
       console.error("Error deleting maintenance log:", error);

@@ -62,6 +62,8 @@ import AccessControl from "./AccessControl";
 import DataManagement from "./DataManagement";
 import SystemLogs from "./SystemLogs";
 import AdminDemoData from "./AdminDemoData";
+import DepartmentSettings from "./DepartmentSettings";
+import UnitSettings from "./UnitSettings";
 
 interface SettingsProps {
   user: User;
@@ -71,7 +73,7 @@ interface SystemUser {
   id: string;
   username: string;
   name: string;
-  role: "admin" | "agent";
+  role: "admin" | "agent" | "viewer" | "finance";
   email?: string;
   createdAt?: string;
 }
@@ -91,25 +93,26 @@ export default function Settings({ user }: SettingsProps) {
   // Form states
   const [newUsername, setNewUsername] = useState("");
   const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState<"admin" | "agent">("agent");
+  const [newRole, setNewRole] = useState<"admin" | "agent" | "finance">("agent");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
   const [editName, setEditName] = useState("");
-  const [editRole, setEditRole] = useState<"admin" | "agent">("agent");
+  const [editRole, setEditRole] = useState<"admin" | "agent" | "finance">("agent");
   const [editEmail, setEditEmail] = useState("");
 
   const [changePassword, setChangePassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "agent">("agent");
+  const [inviteRole, setInviteRole] = useState<"admin" | "agent" | "finance">("agent");
   const [inviteCredentials, setInviteCredentials] = useState<{
     email: string;
     username: string;
     password: string;
     role: string;
     emailSent?: boolean;
+    resendError?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -150,9 +153,9 @@ export default function Settings({ user }: SettingsProps) {
       return;
     }
 
-    // Password validation: alphanumeric with symbols, 6-12 characters
-    if (newPassword.length < 6 || newPassword.length > 12) {
-      toast.error("Password must be between 6 and 12 characters");
+    // Password validation: min 6 characters
+    if (newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
 
@@ -257,19 +260,9 @@ export default function Settings({ user }: SettingsProps) {
       return;
     }
 
-    // Password validation: alphanumeric with symbols, 6-12 characters
-    if (changePassword.length < 6 || changePassword.length > 12) {
-      toast.error("Password must be between 6 and 12 characters");
-      return;
-    }
-
-    // Check for alphanumeric and symbol requirement
-    const hasLetter = /[a-zA-Z]/.test(changePassword);
-    const hasNumber = /[0-9]/.test(changePassword);
-    const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(changePassword);
-
-    if (!hasLetter || !hasNumber || !hasSymbol) {
-      toast.error("Password must contain letters, numbers, and at least one symbol");
+    // Password validation: min 6 characters
+    if (changePassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
 
@@ -321,6 +314,15 @@ export default function Settings({ user }: SettingsProps) {
       return;
     }
 
+    // Check for duplicate email (client-side fast check)
+    const emailTaken = users.some(
+      (u) => u.email && u.email.toLowerCase() === inviteEmail.toLowerCase()
+    );
+    if (emailTaken) {
+      toast.error("A user with this email address already exists.");
+      return;
+    }
+
     try {
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/users/invite`,
@@ -346,8 +348,11 @@ export default function Settings({ user }: SettingsProps) {
 
       if (data.emailSent) {
         toast.success(`✅ Invitation email sent to ${inviteEmail}!`);
+      } else if (data.resendError) {
+        console.error("Resend error:", data.resendError);
+        toast.warning(`User created but email failed: ${data.resendError}`);
       } else {
-        toast.success(`User created! Copy credentials to share manually.`);
+        toast.info(`User created! Email delivery requires a verified Resend domain — copy credentials below.`);
       }
       setShowSendInvite(false);
       setInviteEmail("");
@@ -496,9 +501,9 @@ export default function Settings({ user }: SettingsProps) {
           {/* Settings Tabs */}
           <Tabs defaultValue="profile" className="space-y-4">
             {user.role === "admin" ? (
-              // Admin sees all 6 tabs - responsive layout
+              // Admin sees all 7 tabs - responsive layout
               <div className="w-full overflow-x-auto">
-                <TabsList className="inline-flex w-full min-w-max lg:grid lg:grid-cols-6 lg:max-w-6xl">
+                <TabsList className="inline-flex w-full min-w-max lg:grid lg:grid-cols-7 lg:max-w-6xl">
                   <TabsTrigger value="profile" className="flex items-center gap-2 whitespace-nowrap">
                     <UserCircle className="w-4 h-4" />
                     <span className="hidden sm:inline">My Profile</span>
@@ -508,6 +513,11 @@ export default function Settings({ user }: SettingsProps) {
                     <Users className="w-4 h-4" />
                     <span className="hidden sm:inline">User Management</span>
                     <span className="sm:hidden">Users</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="departments" className="flex items-center gap-2 whitespace-nowrap">
+                    <SettingsIcon className="w-4 h-4" />
+                    <span className="hidden sm:inline">Dept &amp; Units</span>
+                    <span className="sm:hidden">Dept</span>
                   </TabsTrigger>
                   <TabsTrigger value="access-control" className="flex items-center gap-2 whitespace-nowrap">
                     <Lock className="w-4 h-4" />
@@ -680,18 +690,9 @@ export default function Settings({ user }: SettingsProps) {
                           return;
                         }
 
-                        // Password validation
-                        if (newPassword.length < 6 || newPassword.length > 12) {
-                          toast.error("Password must be between 6 and 12 characters");
-                          return;
-                        }
-
-                        const hasLetter = /[a-zA-Z]/.test(newPassword);
-                        const hasNumber = /[0-9]/.test(newPassword);
-                        const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
-
-                        if (!hasLetter || !hasNumber || !hasSymbol) {
-                          toast.error("Password must contain letters, numbers, and at least one symbol");
+                        // Password validation: min 6 characters
+                        if (newPassword.length < 6) {
+                          toast.error("Password must be at least 6 characters");
                           return;
                         }
 
@@ -749,7 +750,7 @@ export default function Settings({ user }: SettingsProps) {
                           required
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          6-12 characters with letters, numbers, and symbols
+                          Min 6 characters with letters, numbers, and a symbol
                         </p>
                       </div>
                       <div>
@@ -952,6 +953,14 @@ export default function Settings({ user }: SettingsProps) {
               </Card>
             </TabsContent>
 
+            {/* Departments & Units Tab */}
+            <TabsContent value="departments" className="space-y-4">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <DepartmentSettings user={user} />
+                <UnitSettings user={user} />
+              </div>
+            </TabsContent>
+
             {/* Access Control Tab */}
             <TabsContent value="access-control" className="space-y-4">
               <AccessControl />
@@ -1023,12 +1032,13 @@ export default function Settings({ user }: SettingsProps) {
               <Label htmlFor="role">
                 Role <span className="text-red-500">*</span>
               </Label>
-              <Select value={newRole} onValueChange={(value: "admin" | "agent") => setNewRole(value)}>
+              <Select value={newRole} onValueChange={(value: "admin" | "agent" | "finance") => setNewRole(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="finance">Finance</SelectItem>
                   <SelectItem value="admin">Administrator</SelectItem>
                 </SelectContent>
               </Select>
@@ -1111,12 +1121,13 @@ export default function Settings({ user }: SettingsProps) {
               <Label htmlFor="edit-role">
                 Role <span className="text-red-500">*</span>
               </Label>
-              <Select value={editRole} onValueChange={(value: "admin" | "agent") => setEditRole(value)}>
+              <Select value={editRole} onValueChange={(value: "admin" | "agent" | "finance") => setEditRole(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="finance">Finance</SelectItem>
                   <SelectItem value="admin">Administrator</SelectItem>
                 </SelectContent>
               </Select>
@@ -1220,12 +1231,13 @@ export default function Settings({ user }: SettingsProps) {
               <Label htmlFor="invite-role">
                 Role <span className="text-red-500">*</span>
               </Label>
-              <Select value={inviteRole} onValueChange={(value: "admin" | "agent") => setInviteRole(value)}>
+              <Select value={inviteRole} onValueChange={(value: "admin" | "agent" | "finance") => setInviteRole(value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="finance">Finance</SelectItem>
                   <SelectItem value="admin">Administrator</SelectItem>
                 </SelectContent>
               </Select>
@@ -1277,10 +1289,10 @@ export default function Settings({ user }: SettingsProps) {
                   </AlertDescription>
                 </Alert>
               ) : (
-                <Alert className="bg-yellow-50 border-yellow-200">
-                  <Mail className="h-4 w-4 text-yellow-600" />
-                  <AlertDescription className="text-yellow-800 text-sm">
-                    📋 <strong>Email not configured.</strong> Please copy and share these credentials with <strong>{inviteCredentials.email}</strong> manually.
+                <Alert className="bg-amber-50 border-amber-300">
+                  <Mail className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-900 text-sm">
+                    ⚠️ <strong>Email not delivered.</strong> Resend requires a verified sending domain to reach external recipients. Copy the credentials below and share them with <strong>{inviteCredentials.email}</strong> manually.
                   </AlertDescription>
                 </Alert>
               )}
@@ -1380,17 +1392,18 @@ export default function Settings({ user }: SettingsProps) {
                 </AlertDescription>
               </Alert>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm text-blue-900">
-                  <strong>To enable automated emails:</strong>
-                </p>
-                <ol className="text-xs text-blue-800 mt-2 space-y-1 ml-4 list-decimal">
-                  <li>Sign up for a free account at <a href="https://resend.com" target="_blank" rel="noopener noreferrer" className="underline">resend.com</a></li>
-                  <li>Get your API key from the dashboard</li>
-                  <li>Add it as the RESEND_API_KEY environment variable</li>
-                  <li>Future invites will be sent automatically!</li>
-                </ol>
-              </div>
+              {!inviteCredentials.emailSent && (
+                <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
+                  <p className="text-sm text-rose-900">
+                    <strong>To enable automatic email delivery:</strong>
+                  </p>
+                  <ol className="text-xs text-rose-800 mt-2 space-y-1 ml-4 list-decimal">
+                    <li>Verify a domain at <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer" className="underline font-medium">resend.com/domains</a></li>
+                    <li>Set the <code className="bg-rose-100 px-1 rounded">RESEND_FROM_EMAIL</code> secret to <code className="bg-rose-100 px-1 rounded">Andersen Asset Management &lt;you@yourdomain.com&gt;</code></li>
+                    <li>Future invites will be delivered automatically</li>
+                  </ol>
+                </div>
+              )}
             </div>
           )}
 

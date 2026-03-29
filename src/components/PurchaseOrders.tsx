@@ -1,3 +1,4 @@
+import { cachedFetch, invalidateCache } from "../utils/cache";
 import { useState, useEffect, useMemo } from "react";
 import { User } from "../App";
 import { Button } from "./ui/button";
@@ -99,13 +100,11 @@ export default function PurchaseOrders({ user }: PurchaseOrdersProps) {
 
   const fetchPurchaseOrders = async () => {
     try {
-      const response = await fetch(
+      const data = await cachedFetch<{ purchaseOrders: any[] }>(
         `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/purchase-orders`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        30_000
       );
-      const data = await response.json();
       setPurchaseOrders(data.purchaseOrders || []);
     } catch (error) {
       console.error("Error fetching purchase orders:", error);
@@ -134,6 +133,7 @@ export default function PurchaseOrders({ user }: PurchaseOrdersProps) {
       if (!response.ok) throw new Error("Failed to create purchase order");
 
       toast.success("Purchase order created successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/purchase-orders`);
       setShowAddDialog(false);
       setFormData(emptyPO);
       fetchPurchaseOrders();

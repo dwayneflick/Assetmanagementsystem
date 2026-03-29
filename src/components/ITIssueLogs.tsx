@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { User } from "../App";
 import { Button } from "./ui/button";
+import { cachedFetch, invalidateCache } from "../utils/cache";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -89,13 +90,11 @@ export default function ITIssueLogs({ user }: ITIssueLogsProps) {
 
   const fetchIssues = async () => {
     try {
-      const response = await fetch(
+      const data = await cachedFetch<{ issues: any[] }>(
         `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/it-issue-logs`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        30_000
       );
-      const data = await response.json();
       setIssues(data.issues || []);
     } catch (error) {
       console.error("Error fetching IT issue logs:", error);
@@ -127,6 +126,7 @@ export default function ITIssueLogs({ user }: ITIssueLogsProps) {
       if (!response.ok) throw new Error("Failed to create issue log");
 
       toast.success("IT issue log created successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/it-issue-logs`);
       setShowAddDialog(false);
       setFormData(emptyIssue);
       fetchIssues();
@@ -155,6 +155,7 @@ export default function ITIssueLogs({ user }: ITIssueLogsProps) {
       if (!response.ok) throw new Error("Failed to update issue log");
 
       toast.success("IT issue log updated successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/it-issue-logs`);
       setShowEditDialog(false);
       setSelectedIssue(null);
       setFormData(emptyIssue);
@@ -185,6 +186,7 @@ export default function ITIssueLogs({ user }: ITIssueLogsProps) {
       if (!response.ok) throw new Error("Failed to delete issue log");
 
       toast.success("IT issue log deleted successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/it-issue-logs`);
       fetchIssues();
     } catch (error) {
       console.error("Error deleting issue log:", error);

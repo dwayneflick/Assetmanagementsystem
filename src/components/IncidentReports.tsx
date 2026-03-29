@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { User } from "../App";
 import { Button } from "./ui/button";
+import { cachedFetch, invalidateCache } from "../utils/cache";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -124,13 +125,11 @@ export default function IncidentReports({ user }: IncidentReportsProps) {
 
   const fetchIncidents = async () => {
     try {
-      const response = await fetch(
+      const data = await cachedFetch<{ incidents: any[] }>(
         `https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/incidents`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        30_000
       );
-      const data = await response.json();
       setIncidents(data.incidents || []);
     } catch (error) {
       console.error("Error fetching incidents:", error);
@@ -159,6 +158,7 @@ export default function IncidentReports({ user }: IncidentReportsProps) {
       if (!response.ok) throw new Error("Failed to create incident");
 
       toast.success("Incident created successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/incidents`);
       setShowAddDialog(false);
       setFormData(emptyIncident);
       fetchIncidents();
@@ -188,6 +188,7 @@ export default function IncidentReports({ user }: IncidentReportsProps) {
       if (!response.ok) throw new Error("Failed to update incident");
 
       toast.success("Incident updated successfully");
+      invalidateCache(`https://${projectId}.supabase.co/functions/v1/make-server-5921d82e/incidents`);
       setShowEditDialog(false);
       setSelectedIncident(null);
       setFormData(emptyIncident);

@@ -3,6 +3,7 @@ import { User } from "../App";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
+import WarrantyAlerts from "./WarrantyAlerts";
 import {
   Package,
   Laptop,
@@ -404,6 +405,9 @@ export default function Dashboard({ user }: DashboardProps) {
           Welcome back, {user.name}! Here's an overview of your asset management system.
         </p>
       </div>
+
+      {/* Warranty Alerts */}
+      <WarrantyAlerts />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
